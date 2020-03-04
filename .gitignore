@@ -4,3 +4,7 @@
 *.ptx
 *.cubin
 *.fatbin
+*.user
+Debug
+.vs
+x64
