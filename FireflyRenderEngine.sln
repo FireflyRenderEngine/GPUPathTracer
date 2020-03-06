@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FireflyRenderEngine", "Fire
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene", "Scene\Scene\Scene.vcxproj", "{5EF3BD78-FAEC-4D02-83CD-804618E88457}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene.Test", "Scene\Scene.Test\Scene.Test\Scene.Test.vcxproj", "{0893E714-FF79-4D97-BC94-EC8649F21436}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +33,14 @@ Global
 		{5EF3BD78-FAEC-4D02-83CD-804618E88457}.Release|x64.Build.0 = Release|x64
 		{5EF3BD78-FAEC-4D02-83CD-804618E88457}.Release|x86.ActiveCfg = Release|Win32
 		{5EF3BD78-FAEC-4D02-83CD-804618E88457}.Release|x86.Build.0 = Release|Win32
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x64.ActiveCfg = Debug|x64
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x64.Build.0 = Debug|x64
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x86.ActiveCfg = Debug|Win32
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x86.Build.0 = Debug|Win32
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Release|x64.ActiveCfg = Release|x64
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Release|x64.Build.0 = Release|x64
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Release|x86.ActiveCfg = Release|Win32
+		{0893E714-FF79-4D97-BC94-EC8649F21436}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
