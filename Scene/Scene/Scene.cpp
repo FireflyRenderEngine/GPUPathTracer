@@ -11,4 +11,3 @@ Scene::Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<std:
 {
 	m_accel = std::make_unique<AccelerationStructure>();
 }
-

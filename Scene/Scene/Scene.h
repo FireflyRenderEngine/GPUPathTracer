@@ -1,4 +1,12 @@
 #pragma once
+
+#ifdef SCENE_EXPORTS
+#define SCENE_API __declspec(dllexport)
+#else
+#define SCENE_API __declspec(dllimport)
+#endif
+
+
 #include <vector>
 #include <memory>
 
@@ -12,8 +20,8 @@ class Camera;
 class Scene
 {
 public:
-	Scene();
-	Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<std::shared_ptr<Material>> materials,
+	SCENE_API Scene();
+	SCENE_API Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<std::shared_ptr<Material>> materials,
 		std::vector<std::shared_ptr<Camera>> cameras);
 private:
 	std::vector<std::shared_ptr<Geometry>> m_geometries;
