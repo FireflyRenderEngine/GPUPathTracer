@@ -3,7 +3,7 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
     <GLM_VER>glm-0.9.9.7</GLM_VER>
-    <INCLUDE_DIR>$(SolutionDir)external</INCLUDE_DIR>
+    <INCLUDE_DIR>$(SolutionDir)external\include</INCLUDE_DIR>
   </PropertyGroup>
   <PropertyGroup>
     <_PropertySheetDisplayName>SceneConfig</_PropertySheetDisplayName>
