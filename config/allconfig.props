@@ -2,23 +2,39 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
-    <GLM_VER>glm-0.9.9.7</GLM_VER>
     <INCLUDE_DIR>$(SolutionDir)external\include</INCLUDE_DIR>
+    <LIB_DIR>$(SolutionDir)external\lib</LIB_DIR>
+    <BIN_DIR>$(SolutionDir)external\bin</BIN_DIR>
   </PropertyGroup>
   <PropertyGroup>
-    <_PropertySheetDisplayName>SceneConfig</_PropertySheetDisplayName>
+    <_PropertySheetDisplayName>AllConfig</_PropertySheetDisplayName>
+    <ExtensionsToDeleteOnClean>*.dll;*.cdf;*.cache;*.obj;*.obj.enc;*.ilk;*.ipdb;*.iobj;*.resources;*.tlb;*.tli;*.tlh;*.tmp;*.rsp;*.pgc;*.pgd;*.meta;*.tlog;*.manifest;*.res;*.pch;*.exp;*.idb;*.rep;*.xdc;*.pdb;*_manifest.rc;*.bsc;*.sbr;*.xml;*.metagen;*.bi</ExtensionsToDeleteOnClean>
+    <CustomBuildAfterTargets>
+    </CustomBuildAfterTargets>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <ItemDefinitionGroup>
-    <ClCompile>
-      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-    </ClCompile>
+    <CustomBuildStep>
+      <Command>
+      </Command>
+    </CustomBuildStep>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <CustomBuildStep>
+      <Message>
+      </Message>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <BuildMacro Include="GLM_VER">
-      <Value>$(GLM_VER)</Value>
-    </BuildMacro>
     <BuildMacro Include="INCLUDE_DIR">
       <Value>$(INCLUDE_DIR)</Value>
+    </BuildMacro>
+    <BuildMacro Include="LIB_DIR">
+      <Value>$(LIB_DIR)</Value>
+    </BuildMacro>
+    <BuildMacro Include="BIN_DIR">
+      <Value>$(BIN_DIR)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>
