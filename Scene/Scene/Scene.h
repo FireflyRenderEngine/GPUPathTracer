@@ -6,7 +6,6 @@
 #define SCENE_API __declspec(dllimport)
 #endif
 
-
 #include <vector>
 #include <memory>
 
