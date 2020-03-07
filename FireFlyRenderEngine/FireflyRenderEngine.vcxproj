@@ -14,6 +14,9 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\GLFWViewer\GLFWViewer.vcxproj">
+      <Project>{0ebd1431-b250-4651-bc73-ebb8dae9dfd1}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Scene\Scene\Scene.vcxproj">
       <Project>{5ef3bd78-faec-4d02-83cd-804618e88457}</Project>
     </ProjectReference>
@@ -59,6 +62,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Link>
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -9,10 +9,18 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene", "Scene\Scene\Scene.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene.Test", "Scene\Scene.Test\Scene.Test\Scene.Test.vcxproj", "{0893E714-FF79-4D97-BC94-EC8649F21436}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Viewer", "Viewer\Viewer.vcxproj", "{194A264D-A981-47E8-B816-0EE0A6FFEC0A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UI", "UI", "{7C3ED444-55D6-4024-88FE-5387DB7A9276}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GLFWViewer", "GLFWViewer\GLFWViewer.vcxproj", "{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{4E8BD443-BC46-4048-940D-2C64341E17A1}.Debug|x64.ActiveCfg = Debug|x64
@@ -26,9 +34,21 @@ Global
 		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x64.ActiveCfg = Debug|x64
 		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x64.Build.0 = Debug|x64
 		{0893E714-FF79-4D97-BC94-EC8649F21436}.Release|x64.ActiveCfg = Release|x64
+		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Debug|x64.ActiveCfg = Debug|x64
+		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Debug|x64.Build.0 = Debug|x64
+		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Release|x64.ActiveCfg = Release|x64
+		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Release|x64.Build.0 = Release|x64
+		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Debug|x64.ActiveCfg = Debug|x64
+		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Debug|x64.Build.0 = Debug|x64
+		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Release|x64.ActiveCfg = Release|x64
+		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{194A264D-A981-47E8-B816-0EE0A6FFEC0A} = {7C3ED444-55D6-4024-88FE-5387DB7A9276}
+		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1} = {7C3ED444-55D6-4024-88FE-5387DB7A9276}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B304C392-8F9E-43BA-8345-67F62B6DB00D}
