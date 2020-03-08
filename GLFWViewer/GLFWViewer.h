@@ -19,6 +19,7 @@ class GLFWViewer : public Viewer
 {
 public:
 	GLFWViewer();
+	GLFWViewer(int windowWidth, int windowHeight);
 	virtual ~GLFWViewer() override = default;
 	virtual bool Init() override;
 	virtual std::string help() override;

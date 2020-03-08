@@ -9,7 +9,7 @@ int main(int argc, char* argv[])
 	// Calls renderer
 	// gets film
 	// outputs film
-	GLFWViewer* viewer = new GLFWViewer();
+	Viewer* viewer = new GLFWViewer(1024,768);
 	viewer->Init();
 	viewer->setupViewer();
 	viewer->render();

@@ -6,6 +6,10 @@ class Viewer
 {
 public:
 	Viewer() = default;
+	Viewer(int windowWidth, int windowHeight)
+		:m_windowWidth(windowWidth), m_windowHeight(windowHeight)
+	{
+	}
 	virtual ~Viewer() = default;
 	virtual bool Init() = 0;
 	virtual std::string help() = 0;

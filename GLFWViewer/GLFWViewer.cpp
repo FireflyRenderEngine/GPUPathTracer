@@ -10,6 +10,13 @@ GLFWViewer::GLFWViewer()
 	m_window = nullptr;
 }
 
+GLFWViewer::GLFWViewer(int windowWidth, int windowHeight)
+{
+	m_window = nullptr;
+	m_windowWidth = windowWidth;
+	m_windowHeight = windowHeight;
+}
+
 bool GLFWViewer::Init()
 {
 	// Initialise GLFW
