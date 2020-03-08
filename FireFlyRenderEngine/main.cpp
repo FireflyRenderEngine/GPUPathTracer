@@ -1,11 +1,16 @@
 #pragma once
 #include <iostream>
+#include "../Scene/Scene/Scene.h"
+
 
 #include "../GLFWViewer/GLFWViewer.h"
 
 int main(int argc, char* argv[])
 {
 	// sets up scene
+	std::shared_ptr<Scene> scene = std::make_shared<Scene>();
+	scene->LoadScene("");
+
 	// Calls renderer
 	// gets film
 	// outputs film
