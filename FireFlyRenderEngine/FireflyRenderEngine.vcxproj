@@ -17,7 +17,7 @@
     <ProjectReference Include="..\GLFWViewer\GLFWViewer.vcxproj">
       <Project>{0ebd1431-b250-4651-bc73-ebb8dae9dfd1}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\Scene\Scene\Scene.vcxproj">
+    <ProjectReference Include="..\Scene\Scene.vcxproj">
       <Project>{5ef3bd78-faec-4d02-83cd-804618e88457}</Project>
     </ProjectReference>
   </ItemGroup>
@@ -70,6 +70,9 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ProjectReference>
+      <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
