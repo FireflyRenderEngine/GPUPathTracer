@@ -20,10 +20,9 @@ class Scene
 {
 public:
 	SCENE_API Scene();
-	SCENE_API Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials,
-		std::vector<std::shared_ptr<Camera>> cameras);
+	SCENE_API Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials, std::vector<std::shared_ptr<Camera>> cameras);
 
-	void LoadScene(std::string filePath);
+	SCENE_API void LoadScene(std::string filePath);
 private:
 	std::vector<std::shared_ptr<Geometry>> m_geometries;
 	std::vector<int> m_emmitterGeometryIndices;

@@ -1,15 +1,14 @@
 #pragma once
 #include <iostream>
-#include "../Scene/Scene/Scene.h"
-
-
-#include "../GLFWViewer/GLFWViewer.h"
+#include "Scene/Scene.h"
+#include "GLFWViewer/GLFWViewer.h"
 
 int main(int argc, char* argv[])
 {
 	// sets up scene
 	std::shared_ptr<Scene> scene = std::make_shared<Scene>();
-	scene->LoadScene("");
+	std::string filePath = "../SceneResources/cube.obj";
+	scene->LoadScene(filePath);
 
 	// Calls renderer
 	// gets film
