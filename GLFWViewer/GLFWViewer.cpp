@@ -13,7 +13,7 @@ GLFWViewer::GLFWViewer()
 	m_window = nullptr;
 }
 
-GLFWViewer::GLFWViewer(int windowWidth, int windowHeight, std::shared_ptr<Scene> Scene) : Viewer(windowWidth, windowHeight, Scene)
+GLFWViewer::GLFWViewer(std::shared_ptr<Scene> Scene) : Viewer(Scene)
 {
 	m_window = nullptr;
 }
@@ -42,7 +42,7 @@ std::string GLFWViewer::help()
 bool GLFWViewer::setupViewer()
 {
 	bool success = false;
-	m_window.reset(glfwCreateWindow(m_windowWidth, m_windowHeight, m_title.c_str(), NULL, NULL));
+	m_window.reset(glfwCreateWindow(m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), m_title.c_str(), NULL, NULL));
 	if (!m_window.get()) 
 	{
 		//Error here: Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.
@@ -61,7 +61,7 @@ bool GLFWViewer::setupViewer()
 
 	// Tell the OpenGL viewer the dimensions of the window
 	// #Note: These dimensions are independet of the GLFW window dimensions. They are used to scale the 2D transformations between [-1, 1] on the screen 
-	glViewport(0, 0, m_windowWidth, m_windowHeight);
+	glViewport(0, 0, m_scene->GetScreenWidth(), m_scene->GetScreenHeight());
 
 	// Register the callback functions with GLFW
 	// These are user defined functions overloaded & to be called by GLFW

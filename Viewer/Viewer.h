@@ -7,8 +7,8 @@ class Viewer
 {
 public:
 	Viewer() = default;
-	Viewer(int windowWidth, int windowHeight, std::shared_ptr<Scene> scene)
-		:m_windowWidth(windowWidth), m_windowHeight(windowHeight), m_scene(scene)
+	Viewer(std::shared_ptr<Scene> scene)
+		:m_scene(scene)
 	{
 	}
 	virtual ~Viewer() = default;
@@ -20,8 +20,6 @@ public:
 	virtual bool Create() = 0;
 	virtual bool Draw() = 0;
 protected:
-	int m_windowWidth{ 1024 };
-	int m_windowHeight{ 768 };
 	std::string m_title{ "Firefly Engine" };
 	std::shared_ptr<Scene> m_scene;
 };

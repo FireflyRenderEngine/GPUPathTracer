@@ -5,15 +5,19 @@
 
 int main(int argc, char* argv[])
 {
+	float screenWidth = 1024;
+	float screenHeight = 768;
+
 	// sets up scene
 	std::shared_ptr<Scene> scene = std::make_shared<Scene>();
 	std::string filePath = "../SceneResources/cube.obj";
+	scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
 	scene->LoadScene(filePath);
 
 	// Calls renderer
 	// gets film
 	// outputs film
-	Viewer* viewer = new GLFWViewer(1024,768,scene);
+	Viewer* viewer = new GLFWViewer(scene);
 	viewer->Init();
 	viewer->setupViewer();
 	viewer->render();

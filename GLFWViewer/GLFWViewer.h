@@ -18,7 +18,7 @@ class GLFWViewer : public Viewer
 {
 public:
 	GLFWViewer();
-	GLFWViewer(int windowWidth, int windowHeight, std::shared_ptr<Scene> scene);
+	GLFWViewer(std::shared_ptr<Scene> scene);
 	virtual bool Init() override;
 	virtual std::string help() override;
 	virtual bool setupViewer() override;

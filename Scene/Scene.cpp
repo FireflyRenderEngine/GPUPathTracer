@@ -1,5 +1,6 @@
 #include "Scene.h"
 #include "Geometry.h"
+#include "Camera.h"
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
 
@@ -7,13 +8,38 @@ Scene::Scene()
 {
 }
 
-Scene::Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials, std::vector<std::shared_ptr<Camera>> cameras)
+Scene::Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials, std::vector<std::shared_ptr<Camera>> cameras, float screenWidth, float screenHeight)
     :m_geometries(geometries),
     m_emmitterGeometryIndices(emitterGeometryIndices),
     m_materials(materials),
     m_cameras(cameras)
 {
     m_accel = std::make_unique<AccelerationStructure>();
+    SetScreenWidthAndHeight(screenWidth, screenHeight);
+}
+
+void Scene::SetScreenWidthAndHeight(float screenWidth, float screenHeight) {
+    m_screenWidth = screenWidth;
+    m_screenHeight = screenHeight;
+}
+
+void Scene::UpdateScreenWidthAndHeight(float screenWidth, float screenHeight)
+{
+    m_screenWidth = screenWidth;
+    m_screenHeight = screenHeight;
+    for (int cameraIndex = 0; cameraIndex < m_cameras.size(); cameraIndex++) {
+        m_cameras[cameraIndex]->UpdateCameraScreenWidthAndHeight(m_screenWidth, m_screenHeight);
+    }   
+}
+
+float Scene::GetScreenWidth()
+{
+    return m_screenWidth;
+}
+
+float Scene::GetScreenHeight()
+{
+    return m_screenHeight;
 }
 
 void Scene::LoadScene(std::string fllePath) {
@@ -69,4 +95,10 @@ void Scene::LoadScene(std::string fllePath) {
     }
 
     // Initialize the camers
+    glm::vec3 cameraPosition = glm::vec3(0.0f, 1.0f, -3.0f);
+    glm::vec3 cameraLookAtPoint = glm::vec3(0.0f, 0.0f, 0.0f);
+    std::shared_ptr<Camera> camera = std::make_shared<Camera>(cameraPosition, cameraLookAtPoint, m_screenWidth, m_screenHeight);
+    m_cameras.push_back(camera);
+
+    // TODO: LOAD MATERIALS AND OTHER STUFF
 }

@@ -61,6 +61,10 @@ public:
 		return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
 	}
 
+	void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight) {
+		m_screenWidth = screenWidth;
+		m_screenHeight = screenHeight;
+	}
 private:
 	glm::vec3 m_cameraPosition;
 	glm::vec3 m_cameraLookAtPosition;
