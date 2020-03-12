@@ -5,22 +5,22 @@
 #include "framework.h"
 #include "GLFWViewer.h"
 
+// The following set of functions are defined as overloads as the callbacks to different events triggered by GLFW
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
+
 GLFWViewer::GLFWViewer()
 {
 	m_window = nullptr;
 }
 
-GLFWViewer::GLFWViewer(int windowWidth, int windowHeight)
+GLFWViewer::GLFWViewer(int windowWidth, int windowHeight, std::shared_ptr<Scene> Scene) : Viewer(windowWidth, windowHeight, Scene)
 {
 	m_window = nullptr;
-	m_windowWidth = windowWidth;
-	m_windowHeight = windowHeight;
 }
 
 bool GLFWViewer::Init()
 {
 	// Initialise GLFW
-	glewExperimental = true; // Needed for core profile
 	if (!glfwInit())
 	{
 		// Error here: Failed to initialize GLFW
@@ -51,12 +51,22 @@ bool GLFWViewer::setupViewer()
 	}
 
 	glfwMakeContextCurrent(m_window.get()); // Initialize GLEW
-	glewExperimental = true; // Needed in core profile
-	if (glewInit() != GLEW_OK) 
+
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
-		//Error here: Failed to initialize GLEW
+		// Failed to initialize GLAD
+		glfwTerminate();
 		return success;
 	}
+
+	// Tell the OpenGL viewer the dimensions of the window
+	// #Note: These dimensions are independet of the GLFW window dimensions. They are used to scale the 2D transformations between [-1, 1] on the screen 
+	glViewport(0, 0, m_windowWidth, m_windowHeight);
+
+	// Register the callback functions with GLFW
+	// These are user defined functions overloaded & to be called by GLFW
+	glfwSetFramebufferSizeCallback(m_window.get(), FramebufferSizeCallback);
+
 	success = true;
 	return success;
 }
@@ -70,16 +80,44 @@ bool GLFWViewer::render()
 	do 
 	{
 		// Clear the screen. It's not mentioned before Tutorial 02, but it can cause flickering, so it's there nonetheless.
+		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		// Draw nothing, see you in tutorial 2 !
+		ProcessInput();
+
+		// Rendering commands for drawing to the screen
 
 		// Swap buffers
 		glfwSwapBuffers(m_window.get());
 		glfwPollEvents();
 
 	} // Check if the ESC key was pressed or the window was closed
-	while (glfwGetKey(m_window.get(), GLFW_KEY_ESCAPE) != GLFW_PRESS &&
-		glfwWindowShouldClose(m_window.get()) == 0);
+	while (glfwGetKey(m_window.get(), GLFW_KEY_ESCAPE) != GLFW_PRESS && glfwWindowShouldClose(m_window.get()) == 0);
 	return false;
+}
+
+void GLFWViewer::ProcessInput()
+{
+	// TODO: process any key presses
+}
+
+bool GLFWViewer::Create() {
+	bool success = false;
+
+
+	success = true;
+	return success;
+}
+
+bool GLFWViewer::Draw() {
+	bool success = false;
+
+
+	success = true;
+	return success;
+}
+
+void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+	glViewport(0, 0, width, height);
 }

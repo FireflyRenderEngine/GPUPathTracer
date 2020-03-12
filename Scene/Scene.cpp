@@ -40,9 +40,10 @@ void Scene::LoadScene(std::string fllePath) {
         std::vector<int> triangleIndices;
 
         for (size_t triangleIndex = 0; triangleIndex < geometries[geometryIndex].mesh.num_face_vertices.size(); triangleIndex++) {
+            int numberOfVerticesPerFace = geometries[geometryIndex].mesh.num_face_vertices[triangleIndex];
 
             // Loop over the triangle attributes.
-            for (size_t attributeIndex = 0; attributeIndex < 3; attributeIndex++) {
+            for (size_t attributeIndex = 0; attributeIndex < numberOfVerticesPerFace; attributeIndex++) {
 
                 // access to vertex
                 tinyobj::index_t idx = geometries[geometryIndex].mesh.indices[index_offset + attributeIndex];
@@ -57,17 +58,15 @@ void Scene::LoadScene(std::string fllePath) {
                 triangleIndices.push_back(index_offset + attributeIndex);
             }
             
-            index_offset += 3;
+            index_offset += numberOfVerticesPerFace;
         }
 
         // Initialze the geometry
         std::shared_ptr<Geometry> geometry = std::make_shared<Geometry>(vertices, normals, uvs, triangleIndices);
-
         m_geometries.push_back(geometry);
+
+        // TODO: Load Material
     }
-
-
-    // Initialize the materials
 
     // Initialize the camers
 }

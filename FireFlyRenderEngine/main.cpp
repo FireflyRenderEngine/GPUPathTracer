@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
 	// Calls renderer
 	// gets film
 	// outputs film
-	Viewer* viewer = new GLFWViewer(1024,768);
+	Viewer* viewer = new GLFWViewer(1024,768,scene);
 	viewer->Init();
 	viewer->setupViewer();
 	viewer->render();
