@@ -4,11 +4,15 @@
 #include "pch.h"
 #include "framework.h"
 #include "GLFWViewer.h"
+#include "../Scene/Geometry.h"
+#include <sstream>
+#include <fstream>
+
 
 // The following set of functions are defined as overloads as the callbacks to different events triggered by GLFW
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
-GLFWViewer::GLFWViewer()
+GLFWViewer::GLFWViewer() : Viewer(nullptr)
 {
 	m_window = nullptr;
 }
@@ -67,6 +71,8 @@ bool GLFWViewer::setupViewer()
 	// These are user defined functions overloaded & to be called by GLFW
 	glfwSetFramebufferSizeCallback(m_window.get(), FramebufferSizeCallback);
 
+	Create();
+
 	success = true;
 	return success;
 }
@@ -86,6 +92,7 @@ bool GLFWViewer::render()
 		ProcessInput();
 
 		// Rendering commands for drawing to the screen
+		Draw();
 
 		// Swap buffers
 		glfwSwapBuffers(m_window.get());
@@ -101,9 +108,112 @@ void GLFWViewer::ProcessInput()
 	// TODO: process any key presses
 }
 
+std::string GetShaderCode(std::string filePath) {	
+	// Read the Vertex Shader code from the file
+	std::string VertexShaderCode;
+	std::ifstream VertexShaderStream(filePath, std::ios::in);
+	if (VertexShaderStream.is_open()) {
+		std::stringstream sstr;
+		sstr << VertexShaderStream.rdbuf();
+		VertexShaderCode = sstr.str();
+		VertexShaderStream.close();
+	}
+	else {
+		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", filePath);
+		getchar();
+		return "";
+	}
+	return VertexShaderCode;
+}
+
 bool GLFWViewer::Create() {
 	bool success = false;
 
+	// Compile shaders and creata a shader program
+	GLint Result = GL_FALSE;
+	int InfoLogLength;
+	// Compile Vertex Shader
+	unsigned int vertexShader;
+	vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	std::string vertexShaderFilePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\VertexShader.glsl)";
+	std::string vertexShaderSource = GetShaderCode(vertexShaderFilePath);
+
+	char const* vertexSourcePointer = vertexShaderSource.c_str();
+	glShaderSource(vertexShader, 1, &vertexSourcePointer, NULL);
+	glCompileShader(vertexShader);
+
+	// Check Vertex Shader
+	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength > 0) {
+		std::vector<char> vertexShaderErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(vertexShader, InfoLogLength, NULL, &vertexShaderErrorMessage[0]);
+		return false;
+	}
+
+	// Compile Fragment Shader
+	unsigned int fragmentShader;
+	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	std::string fragmentShaderFilePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\FragmentShader.glsl)";
+	std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
+
+	char const* fragmentSourcePointer = fragmentShaderSource.c_str();
+	glShaderSource(fragmentShader, 1, &fragmentSourcePointer, NULL);
+	glCompileShader(fragmentShader);
+	// Check Fragment Shader
+	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength > 0) {
+		std::vector<char> fragmentShaderErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(fragmentShader, InfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
+		return false;
+	}
+
+	// Create a shader program
+	m_shaderProgram = glCreateProgram();
+	glAttachShader(m_shaderProgram, vertexShader);
+	glAttachShader(m_shaderProgram, fragmentShader);
+	glLinkProgram(m_shaderProgram);
+	glGetProgramiv(m_shaderProgram, GL_LINK_STATUS, &Result);
+	if (InfoLogLength > 0) {
+		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(m_shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
+		return false;
+	}
+
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+
+	// We will loop over the geometries and store the mesh data in GL Pointers
+	for (int geometryIndex = 0; geometryIndex < m_scene->m_geometries.size(); geometryIndex++) {
+		unsigned int VAO;
+		glGenVertexArrays(1, &VAO);
+		glBindVertexArray(VAO);
+
+		// Set the VBO for the vertex buffer data
+		unsigned int VBOVertexPos;
+		glGenBuffers(1, &VBOVertexPos);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * m_scene->m_geometries[geometryIndex]->m_vertices.size(), &(m_scene->m_geometries[geometryIndex]->m_vertices[0]), GL_STATIC_DRAW);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+
+		unsigned int VBOVertexUV;
+		glGenBuffers(1, &VBOVertexUV);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * m_scene->m_geometries[geometryIndex]->m_uvs.size(), &(m_scene->m_geometries[geometryIndex]->m_uvs[0]), GL_STATIC_DRAW);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+
+		unsigned int VBOVertexNormals;
+		glGenBuffers(1, &VBOVertexNormals);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexNormals);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * m_scene->m_geometries[geometryIndex]->m_normals.size(), &(m_scene->m_geometries[geometryIndex]->m_normals[0]), GL_STATIC_DRAW);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(2);
+
+		m_VAOS.push_back(VAO);
+	}
 
 	success = true;
 	return success;
@@ -112,6 +222,12 @@ bool GLFWViewer::Create() {
 bool GLFWViewer::Draw() {
 	bool success = false;
 
+	// Loop over the mesh 
+	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) {
+		glUseProgram(m_shaderProgram);
+		glBindVertexArray(m_VAOS[geometryIndex]);
+		glDrawArrays(GL_TRIANGLES, 0, m_scene->m_geometries[geometryIndex]->m_triangleIndices.size());
+	}
 
 	success = true;
 	return success;

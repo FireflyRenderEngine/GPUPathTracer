@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
 
 	// sets up scene
 	std::shared_ptr<Scene> scene = std::make_shared<Scene>();
-	std::string filePath = "../SceneResources/cube.obj";
+	std::string filePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\cube.obj)";
 	scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
 	scene->LoadScene(filePath);
 

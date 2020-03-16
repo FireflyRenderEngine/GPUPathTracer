@@ -36,4 +36,8 @@ public:
 	}
 private:
 	std::unique_ptr<GLFWwindow, glfwDeleter> m_window;
+
+	// The set of VAO's assiciated with the vertex buffer data
+	std::vector<unsigned int> m_VAOS;
+	unsigned int m_shaderProgram;
 };
