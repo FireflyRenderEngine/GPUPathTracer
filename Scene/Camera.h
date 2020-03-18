@@ -8,7 +8,7 @@ class Camera
 public:
 	Camera() {}
 
-	Camera(glm::vec3 cameraPosition, glm::vec3 cameraLookAtPosition, float screenWidth, float screenHeight, glm::vec3 worldUp = glm::vec3(0.0f, 1.0f, 0.0f), float fov = 70, float cearClip = 0.1f, float farClip = 10.0f, float sensitivity = 0.01f)
+	Camera(glm::vec3 cameraPosition, glm::vec3 cameraLookAtPosition, float screenWidth, float screenHeight, glm::vec3 worldUp = glm::vec3(0.0f, 1.0f, 0.0f), float fov = 70, float cearClip = 0.1f, float farClip = 1000.0f, float sensitivity = 0.01f)
 		: m_cameraPosition(cameraPosition), m_cameraLookAtPosition(cameraLookAtPosition), m_screenWidth(screenWidth), m_screenHeight(screenHeight), m_worldUp(worldUp), m_fov(fov), m_nearClip(cearClip), m_farClip(farClip), m_sensitivity(sensitivity)
 	{
 		m_cameraForward = glm::normalize(m_cameraLookAtPosition - m_cameraPosition);

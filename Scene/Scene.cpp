@@ -89,9 +89,9 @@ void Scene::LoadScene(std::string fllePath) {
 
         // Initialze the geometry
         // Initialize geometry's transforms
-        glm::vec3 position = glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::vec3 rotation = glm::vec3(0.0f, 45.0f, 0.0f);
-        glm::vec3 scale = glm::vec3(1.0f, 2.0f, 1.0f);
+        glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
+        glm::vec3 rotation = glm::vec3(0.0f, 0.0f, 0.0f);
+        glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
         std::shared_ptr<Geometry> geometry = std::make_shared<Geometry>(vertices, normals, uvs, triangleIndices, position, rotation, scale);
         m_geometries.push_back(geometry);
 
@@ -99,7 +99,7 @@ void Scene::LoadScene(std::string fllePath) {
     }
 
     // Initialize the camers
-    glm::vec3 cameraPosition = glm::vec3(0.0f, 1.0f, 10.0f);
+    glm::vec3 cameraPosition = glm::vec3(0.0f, 5.0f, 10.0f);
     glm::vec3 cameraLookAtPoint = glm::vec3(0.0f, 0.0f, 0.0f);
     std::shared_ptr<Camera> camera = std::make_shared<Camera>(cameraPosition, cameraLookAtPoint, m_screenWidth, m_screenHeight);
     m_cameras.push_back(camera);
