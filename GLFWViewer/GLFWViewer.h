@@ -3,6 +3,7 @@
 #include "../Viewer/Viewer.h"
 #include <glad.h>
 #include <glfw3.h>
+#include "../glm-0.9.9.7/mat4x4.hpp"
 
 #include <memory>
 
@@ -26,6 +27,10 @@ public:
 
 	virtual bool Create() override;
 	virtual bool Draw() override;
+	virtual void UpdateViewMatrix();
+	virtual void SetGeometryModelMatrix(glm::mat4 modelMatrix);
+	virtual void UpdateProjectionMatrix();
+
 
 	// This function is used to check & deal with any key press events
 	void ProcessInput();

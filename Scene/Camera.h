@@ -1,7 +1,7 @@
 #pragma once
-#include <vec3.hpp>
-#include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
+#include "../glm-0.9.9.7/vec3.hpp"
+#include "../glm-0.9.9.7/glm.hpp"
+#include <../glm-0.9.9.7/gtc/matrix_transform.hpp>
 
 class Camera
 {

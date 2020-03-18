@@ -5,6 +5,8 @@
 #include "framework.h"
 #include "GLFWViewer.h"
 #include "../Scene/Geometry.h"
+#include "../Scene/Camera.h"
+#include "../glm-0.9.9.7/gtc/type_ptr.hpp"
 #include <sstream>
 #include <fstream>
 
@@ -86,7 +88,7 @@ bool GLFWViewer::render()
 	do 
 	{
 		// Clear the screen. It's not mentioned before Tutorial 02, but it can cause flickering, so it's there nonetheless.
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		ProcessInput();
@@ -179,7 +181,7 @@ bool GLFWViewer::Create() {
 		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
 		glGetShaderInfoLog(m_shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
 		return false;
-	}
+	}	
 
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
@@ -209,7 +211,7 @@ bool GLFWViewer::Create() {
 		glGenBuffers(1, &VBOVertexNormals);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexNormals);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * m_scene->m_geometries[geometryIndex]->m_normals.size(), &(m_scene->m_geometries[geometryIndex]->m_normals[0]), GL_STATIC_DRAW);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(2);
 
 		m_VAOS.push_back(VAO);
@@ -219,15 +221,36 @@ bool GLFWViewer::Create() {
 	return success;
 }
 
+void GLFWViewer::UpdateProjectionMatrix() {
+	int projectionMatrixLocation = glGetUniformLocation(m_shaderProgram, "projectionMatrix");
+	glm::mat4 projectionMatrix = m_scene->m_cameras[0]->GetProjectionMatrix();
+	glUniformMatrix4fv(projectionMatrixLocation, 1, false, glm::value_ptr(projectionMatrix));
+}
+
+void GLFWViewer::UpdateViewMatrix() {
+	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "viewMatrix");
+	glm::mat4 viewMatrix = m_scene->m_cameras[0]->GetViewMatrix();
+	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(viewMatrix));
+}
+
+void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) {
+	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "modelMatrix");
+	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(modelMatrix));
+}
+
 bool GLFWViewer::Draw() {
 	bool success = false;
 
 	// Loop over the mesh 
+	glUseProgram(m_shaderProgram);
+	UpdateProjectionMatrix();
+	UpdateViewMatrix();
 	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) {
-		glUseProgram(m_shaderProgram);
 		glBindVertexArray(m_VAOS[geometryIndex]);
+		// Bind the Model Matrix corrosponding to the current Geometry
+		SetGeometryModelMatrix(m_scene->m_geometries[geometryIndex]->m_modelMatrix);
 		glDrawArrays(GL_TRIANGLES, 0, m_scene->m_geometries[geometryIndex]->m_triangleIndices.size());
-	}
+	} 
 
 	success = true;
 	return success;
@@ -236,4 +259,4 @@ bool GLFWViewer::Draw() {
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
-}
+}	

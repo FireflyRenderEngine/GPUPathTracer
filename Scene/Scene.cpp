@@ -88,14 +88,16 @@ void Scene::LoadScene(std::string fllePath) {
         }
 
         // Initialze the geometry
-        std::shared_ptr<Geometry> geometry = std::make_shared<Geometry>(vertices, normals, uvs, triangleIndices);
+        // Initialize geometry's model matrix
+        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        std::shared_ptr<Geometry> geometry = std::make_shared<Geometry>(vertices, normals, uvs, triangleIndices, modelMatrix);
         m_geometries.push_back(geometry);
 
         // TODO: Load Material
     }
 
     // Initialize the camers
-    glm::vec3 cameraPosition = glm::vec3(0.0f, 1.0f, -3.0f);
+    glm::vec3 cameraPosition = glm::vec3(0.0f, 1.0f, 10.0f);
     glm::vec3 cameraLookAtPoint = glm::vec3(0.0f, 0.0f, 0.0f);
     std::shared_ptr<Camera> camera = std::make_shared<Camera>(cameraPosition, cameraLookAtPoint, m_screenWidth, m_screenHeight);
     m_cameras.push_back(camera);
