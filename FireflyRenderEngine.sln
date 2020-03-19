@@ -5,9 +5,7 @@ VisualStudioVersion = 16.0.29709.97
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FireflyRenderEngine", "FireFlyRenderEngine\FireflyRenderEngine.vcxproj", "{4E8BD443-BC46-4048-940D-2C64341E17A1}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene", "Scene\Scene\Scene.vcxproj", "{5EF3BD78-FAEC-4D02-83CD-804618E88457}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene.Test", "Scene\Scene.Test\Scene.Test\Scene.Test.vcxproj", "{0893E714-FF79-4D97-BC94-EC8649F21436}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene", "Scene\Scene.vcxproj", "{5EF3BD78-FAEC-4D02-83CD-804618E88457}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Viewer", "Viewer\Viewer.vcxproj", "{194A264D-A981-47E8-B816-0EE0A6FFEC0A}"
 EndProject
@@ -15,7 +13,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UI", "UI", "{7C3ED444-55D6-
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GLFWViewer", "GLFWViewer\GLFWViewer.vcxproj", "{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}"
 EndProject
+<<<<<<< HEAD
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Film", "Film\Film.vcxproj", "{CAD99464-FAA8-40B0-A839-8DD7608A56CF}"
+=======
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Scene.Test", "Scene\Scene.Test\Scene.Test.vcxproj", "{DCD6E5A5-2C88-4B8A-8B34-8824A36C0C25}"
+>>>>>>> 6d1962237dc449e7b3474f94c628fcd4b66c6d49
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,9 +33,6 @@ Global
 		{5EF3BD78-FAEC-4D02-83CD-804618E88457}.Debug|x64.Build.0 = Debug|x64
 		{5EF3BD78-FAEC-4D02-83CD-804618E88457}.Release|x64.ActiveCfg = Release|x64
 		{5EF3BD78-FAEC-4D02-83CD-804618E88457}.Release|x64.Build.0 = Release|x64
-		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x64.ActiveCfg = Debug|x64
-		{0893E714-FF79-4D97-BC94-EC8649F21436}.Debug|x64.Build.0 = Debug|x64
-		{0893E714-FF79-4D97-BC94-EC8649F21436}.Release|x64.ActiveCfg = Release|x64
 		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Debug|x64.ActiveCfg = Debug|x64
 		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Debug|x64.Build.0 = Debug|x64
 		{194A264D-A981-47E8-B816-0EE0A6FFEC0A}.Release|x64.ActiveCfg = Release|x64
@@ -42,10 +41,16 @@ Global
 		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Debug|x64.Build.0 = Debug|x64
 		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Release|x64.ActiveCfg = Release|x64
 		{0EBD1431-B250-4651-BC73-EBB8DAE9DFD1}.Release|x64.Build.0 = Release|x64
+<<<<<<< HEAD
 		{CAD99464-FAA8-40B0-A839-8DD7608A56CF}.Debug|x64.ActiveCfg = Debug|x64
 		{CAD99464-FAA8-40B0-A839-8DD7608A56CF}.Debug|x64.Build.0 = Debug|x64
 		{CAD99464-FAA8-40B0-A839-8DD7608A56CF}.Release|x64.ActiveCfg = Release|x64
 		{CAD99464-FAA8-40B0-A839-8DD7608A56CF}.Release|x64.Build.0 = Release|x64
+=======
+		{DCD6E5A5-2C88-4B8A-8B34-8824A36C0C25}.Debug|x64.ActiveCfg = Debug|x64
+		{DCD6E5A5-2C88-4B8A-8B34-8824A36C0C25}.Debug|x64.Build.0 = Debug|x64
+		{DCD6E5A5-2C88-4B8A-8B34-8824A36C0C25}.Release|x64.ActiveCfg = Release|x64
+>>>>>>> 6d1962237dc449e7b3474f94c628fcd4b66c6d49
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

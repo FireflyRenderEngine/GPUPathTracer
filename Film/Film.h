@@ -1,11 +1,21 @@
 #pragma once
 
-#include <OpenEXR/config/OpenEXRConfig.h>
-#include <OpenEXR/IlmImf/ImfRgbaFile.h>
-#include <OpenEXR/IlmImf/ImfArray.h>
+#ifdef _USRDLL
+#	ifdef FILM_EXPORTS
+#		define FILM_API __declspec(dllexport)
+#	else
+#		define FILM_API __declspec(dllimport)
+#	endif
+#else
+#	define FILM_API
+#endif
 
-class Film
+#include <string>
+
+class FILM_API Film
 {
 public:
+	Film() = default;
+	bool saveAsEXR(std::string filename);
 private:
 };

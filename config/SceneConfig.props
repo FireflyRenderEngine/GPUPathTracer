@@ -5,18 +5,22 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros">
     <GLM_VER>glm-0.9.9.7</GLM_VER>
+    <TINYOBJ_VER>tinyobjloader-2.0.0</TINYOBJ_VER>
   </PropertyGroup>
   <PropertyGroup>
     <_PropertySheetDisplayName>SceneConfig</_PropertySheetDisplayName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(TINYOBJ_VER);$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <BuildMacro Include="GLM_VER">
       <Value>$(GLM_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="TINYOBJ_VER">
+      <Value>$(TINYOBJ_VER)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

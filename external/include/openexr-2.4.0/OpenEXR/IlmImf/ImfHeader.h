@@ -48,9 +48,9 @@
 #include "ImfName.h"
 #include "ImfTileDescription.h"
 #include "ImfInt64.h"
-#include "ImathVec.h"
-#include "ImathBox.h"
-#include "IexBaseExc.h"
+#include "../../IlmBase/Imath/ImathVec.h"
+#include "../../IlmBase/Imath/ImathBox.h"
+#include "../../IlmBase/Iex/IexBaseExc.h"
 
 #include "ImfForward.h"
 #include "ImfNamespace.h"

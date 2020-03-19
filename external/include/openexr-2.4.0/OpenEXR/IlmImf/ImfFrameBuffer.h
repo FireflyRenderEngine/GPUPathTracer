@@ -48,7 +48,7 @@
 #include "ImfPixelType.h"
 #include "ImfExport.h"
 #include "ImfNamespace.h"
-#include "ImathBox.h"
+#include "../../IlmBase/Imath/ImathBox.h"
 
 #include <map>
 #include <string>

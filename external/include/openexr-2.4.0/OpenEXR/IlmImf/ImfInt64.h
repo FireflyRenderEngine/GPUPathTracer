@@ -41,7 +41,7 @@
 //
 //----------------------------------------------------------------------------
 
-#include "ImathInt64.h"
+#include "../../IlmBase/Imath/ImathInt64.h"  
 #include "ImfNamespace.h"
 
 OPENEXR_IMF_INTERNAL_NAMESPACE_HEADER_ENTER
