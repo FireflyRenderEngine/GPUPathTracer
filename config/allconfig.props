@@ -5,6 +5,7 @@
     <INCLUDE_DIR>$(SolutionDir)external\include</INCLUDE_DIR>
     <LIB_DIR>$(SolutionDir)external\lib</LIB_DIR>
     <BIN_DIR>$(SolutionDir)external\bin</BIN_DIR>
+    <GLM_VER>glm-0.9.9.7</GLM_VER>
   </PropertyGroup>
   <PropertyGroup>
     <_PropertySheetDisplayName>AllConfig</_PropertySheetDisplayName>
@@ -25,6 +26,9 @@
       <Message>
       </Message>
     </CustomBuildStep>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <BuildMacro Include="INCLUDE_DIR">
@@ -35,6 +39,9 @@
     </BuildMacro>
     <BuildMacro Include="BIN_DIR">
       <Value>$(BIN_DIR)</Value>
+    </BuildMacro>
+    <BuildMacro Include="GLM_VER">
+      <Value>$(GLM_VER)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

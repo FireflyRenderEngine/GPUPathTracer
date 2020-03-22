@@ -5,7 +5,7 @@
 #include "framework.h"
 #include "GLFWViewer.h"
 #include "../Scene/Geometry.h"
-#include "../Scene/Camera.h"
+#include "../Scene/RasterCamera.h"
 #include "../glm-0.9.9.7/gtc/type_ptr.hpp"
 #include <sstream>
 #include <fstream>
@@ -91,7 +91,6 @@ bool GLFWViewer::render()
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		ProcessKeyboardInput();
-		ProcessMouseInput();
 
 		// Rendering commands for drawing to the screen
 		Draw();
@@ -112,42 +111,17 @@ void GLFWViewer::ProcessKeyboardInput()
 		glfwSetWindowShouldClose(m_window.get(), true);
 
 	if (glfwGetKey(m_window.get(), GLFW_KEY_W) == GLFW_PRESS)
-		m_scene->m_cameras[0]->ProcessKeyboard(FORWARD);
+		m_scene->m_rasterCamera->ProcessKeyboard(FORWARD);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_S) == GLFW_PRESS)
-		m_scene->m_cameras[0]->ProcessKeyboard(BACKWARD);
+		m_scene->m_rasterCamera->ProcessKeyboard(BACKWARD);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_A) == GLFW_PRESS)
-		m_scene->m_cameras[0]->ProcessKeyboard(LEFT);
+		m_scene->m_rasterCamera->ProcessKeyboard(LEFT);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_D) == GLFW_PRESS)
-		m_scene->m_cameras[0]->ProcessKeyboard(RIGHT);
+		m_scene->m_rasterCamera->ProcessKeyboard(RIGHT);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_Q) == GLFW_PRESS)
-		m_scene->m_cameras[0]->ProcessKeyboard(UP);
+		m_scene->m_rasterCamera->ProcessKeyboard(UP);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_E) == GLFW_PRESS)
-		m_scene->m_cameras[0]->ProcessKeyboard(DOWN);
-}
-
-void GLFWViewer::ProcessMouseInput() {
-	// TODO
-	/*if (glfwGetMouseButton(m_window.get(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) 
-	{
-		if (m_scene->m_cameras[0]->GetFirstMouseInputState() == false)
-		{
-			m_scene->m_cameras[0]->SetFirstMouseInputState(true);
-			double xPos, yPos;
-			glfwGetCursorPos(m_window.get(), &xPos, &yPos);
-			m_scene->m_cameras[0]->SetClickPosition(xPos, yPos);
-		}
-		else if (m_scene->m_cameras[0]->GetFirstMouseInputState() == true)
-		{
-			double xPos, yPos;
-			glfwGetCursorPos(m_window.get(), &xPos, &yPos);
-			m_scene->m_cameras[0]->SetClickPositionDeta(xPos, yPos);
-			m_scene->m_cameras[0]->ProcessMouseMovement();
-		}
-	}
-	else if (glfwGetMouseButton(m_window.get(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
-	{
-		m_scene->m_cameras[0]->SetFirstMouseInputState(false);
-	}*/
+		m_scene->m_rasterCamera->ProcessKeyboard(DOWN);
 }
 
 std::string GetShaderCode(std::string filePath) {	
@@ -263,13 +237,13 @@ bool GLFWViewer::Create() {
 
 void GLFWViewer::UpdateProjectionMatrix() {
 	int projectionMatrixLocation = glGetUniformLocation(m_shaderProgram, "projectionMatrix");
-	glm::mat4 projectionMatrix = m_scene->m_cameras[0]->GetProjectionMatrix();
+	glm::mat4 projectionMatrix = m_scene->m_rasterCamera->GetProjectionMatrix();
 	glUniformMatrix4fv(projectionMatrixLocation, 1, false, glm::value_ptr(projectionMatrix));
 }
 
 void GLFWViewer::UpdateViewMatrix() {
 	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "viewMatrix");
-	glm::mat4 viewMatrix = m_scene->m_cameras[0]->GetViewMatrix();
+	glm::mat4 viewMatrix = m_scene->m_rasterCamera->GetViewMatrix();
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(viewMatrix));
 }
 

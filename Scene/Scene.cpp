@@ -1,6 +1,6 @@
 #include "Scene.h"
 #include "Geometry.h"
-#include "Camera.h"
+#include "RasterCamera.h"
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
 
@@ -28,7 +28,7 @@ void Scene::UpdateScreenWidthAndHeight(float screenWidth, float screenHeight)
     m_screenWidth = screenWidth;
     m_screenHeight = screenHeight;
     for (int cameraIndex = 0; cameraIndex < m_cameras.size(); cameraIndex++) {
-        m_cameras[cameraIndex]->UpdateCameraScreenWidthAndHeight(m_screenWidth, m_screenHeight);
+        m_rasterCamera->UpdateCameraScreenWidthAndHeight(m_screenWidth, m_screenHeight);
     }   
 }
 
@@ -42,7 +42,7 @@ float Scene::GetScreenHeight()
     return m_screenHeight;
 }
 
-void Scene::LoadScene(std::string fllePath) {
+void Scene::LoadOBJ(std::string fllePath) {
     // Load & insert the geometries 
     tinyobj::attrib_t geometryAttributes;
     std::vector<tinyobj::shape_t> geometries;
@@ -98,10 +98,9 @@ void Scene::LoadScene(std::string fllePath) {
         // TODO: Load Material
     }
 
-    // Initialize the camers
-    glm::vec3 cameraPosition = glm::vec3(0.0f, 5.0f, 10.0f);
-    std::shared_ptr<Camera> camera = std::make_shared<Camera>(cameraPosition, m_screenWidth, m_screenHeight);
-    m_cameras.push_back(camera);
-
     // TODO: LOAD MATERIALS AND OTHER STUFF
+}
+
+void Scene::SetRasterCamera(glm::vec3 cameraPosition) {
+    m_rasterCamera = std::make_shared<RasterCamera>(cameraPosition, m_screenWidth, m_screenHeight);
 }

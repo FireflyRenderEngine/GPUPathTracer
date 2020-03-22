@@ -83,10 +83,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="RasterCamera.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="AccelerationStructure.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="Scene.h" />
+    <ClInclude Include="Triangle.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Scene.cpp" />

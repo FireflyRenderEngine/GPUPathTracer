@@ -1,8 +1,8 @@
 #pragma once
-#include "../glm-0.9.9.7/vec3.hpp"
-#include "../glm-0.9.9.7/vec2.hpp"
-#include "../glm-0.9.9.7//mat4x4.hpp"
-#include "../glm-0.9.9.7/gtc/matrix_transform.hpp"
+#include "vec3.hpp"
+#include "vec2.hpp"
+#include "mat4x4.hpp"
+#include "gtc/matrix_transform.hpp"
 #include <vector>
 #include <memory>
 
@@ -51,3 +51,4 @@ public:
 	glm::vec3 m_geometryRotationAngleAlongAxis;
 	glm::vec3 m_geometryScale;
 };
+

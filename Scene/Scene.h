@@ -12,11 +12,12 @@
 #include <vector>
 #include <memory>
 #include <iostream>
-
 #include "AccelerationStructure.h"
+#include "vec3.hpp"
 
 class Geometry;
 class Material;
+class RasterCamera;
 class Camera;
 
 class SCENE_API Scene
@@ -29,12 +30,14 @@ public:
 	float GetScreenWidth();
 	float GetScreenHeight();
 
-	void LoadScene(std::string filePath);
+	void LoadOBJ(std::string filePath);
+	void SetRasterCamera(glm::vec3 cameraPosition);
 
 	std::vector<std::shared_ptr<Geometry>> m_geometries;
 	std::vector<int> m_emmitterGeometryIndices;
 	std::vector<std::shared_ptr<Material>> m_materials;
 	std::vector<std::shared_ptr<Camera>> m_cameras;
+	std::shared_ptr<RasterCamera> m_rasterCamera;
 	std::unique_ptr<AccelerationStructure> m_accel;
 	float m_screenWidth, m_screenHeight;
 };
