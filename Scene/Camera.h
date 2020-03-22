@@ -22,6 +22,7 @@ public:
 		: m_cameraPosition(cameraPosition), m_screenWidth(screenWidth), m_screenHeight(screenHeight), m_worldUp(worldUp), m_cameraYaw(yaw), m_cameraPitch(pitch), m_fov(fov), m_nearClip(cearClip), m_farClip(farClip), m_cameraMouseSensitivity(sensitivity)
 	{
 		m_cameraForward = glm::vec3(0.0f, 0.0f, -1.0f);
+		m_cameraFirstMouseInput = false;
 		UpdateBasisAxis();
 	}
 
@@ -36,6 +37,15 @@ public:
 	{
 		m_xDelta -= xPos;
 		m_yDelta -= yPos;
+	}
+
+	void SetFirstMouseInputState(bool state) 
+	{
+		m_cameraFirstMouseInput = state;
+	}
+
+	bool GetFirstMouseInputState() {
+		return m_cameraFirstMouseInput;
 	}
 
 	// Processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
@@ -54,11 +64,6 @@ public:
 			m_cameraPosition -= m_cameraUp * velocity;
 		if (direction == DOWN)
 			m_cameraPosition += m_cameraUp * velocity;
-	}
-
-	void ZoomInOut(float zDelta)
-	{
-		m_cameraPosition = m_cameraPosition + zDelta * m_cameraForward;
 	}
 
 	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
@@ -127,6 +132,7 @@ private:
     float m_cameraMovementSpeed;
     float m_cameraMouseSensitivity;
     float m_cameraZoom;
+	bool m_cameraFirstMouseInput;
 
 	float m_screenWidth;
 	float m_screenHeight;

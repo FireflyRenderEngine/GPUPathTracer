@@ -10,7 +10,6 @@
 #include <sstream>
 #include <fstream>
 
-
 // The following set of functions are defined as overloads as the callbacks to different events triggered by GLFW
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -91,7 +90,8 @@ bool GLFWViewer::render()
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		ProcessInput();
+		ProcessKeyboardInput();
+		ProcessMouseInput();
 
 		// Rendering commands for drawing to the screen
 		Draw();
@@ -105,9 +105,9 @@ bool GLFWViewer::render()
 	return false;
 }
 
-void GLFWViewer::ProcessInput()
+void GLFWViewer::ProcessKeyboardInput()
 {
-	// TODO: process any key presses
+	// process any key presses
 	if (glfwGetKey(m_window.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(m_window.get(), true);
 
@@ -117,10 +117,37 @@ void GLFWViewer::ProcessInput()
 		m_scene->m_cameras[0]->ProcessKeyboard(BACKWARD);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_A) == GLFW_PRESS)
 		m_scene->m_cameras[0]->ProcessKeyboard(LEFT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_D) == GLFW_PRESS)
+		m_scene->m_cameras[0]->ProcessKeyboard(RIGHT);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_Q) == GLFW_PRESS)
 		m_scene->m_cameras[0]->ProcessKeyboard(UP);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_E) == GLFW_PRESS)
 		m_scene->m_cameras[0]->ProcessKeyboard(DOWN);
+}
+
+void GLFWViewer::ProcessMouseInput() {
+	// TODO
+	/*if (glfwGetMouseButton(m_window.get(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) 
+	{
+		if (m_scene->m_cameras[0]->GetFirstMouseInputState() == false)
+		{
+			m_scene->m_cameras[0]->SetFirstMouseInputState(true);
+			double xPos, yPos;
+			glfwGetCursorPos(m_window.get(), &xPos, &yPos);
+			m_scene->m_cameras[0]->SetClickPosition(xPos, yPos);
+		}
+		else if (m_scene->m_cameras[0]->GetFirstMouseInputState() == true)
+		{
+			double xPos, yPos;
+			glfwGetCursorPos(m_window.get(), &xPos, &yPos);
+			m_scene->m_cameras[0]->SetClickPositionDeta(xPos, yPos);
+			m_scene->m_cameras[0]->ProcessMouseMovement();
+		}
+	}
+	else if (glfwGetMouseButton(m_window.get(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
+	{
+		m_scene->m_cameras[0]->SetFirstMouseInputState(false);
+	}*/
 }
 
 std::string GetShaderCode(std::string filePath) {	

@@ -33,7 +33,8 @@ public:
 
 
 	// This function is used to check & deal with any key press events
-	void ProcessInput();
+	void ProcessKeyboardInput();
+	void ProcessMouseInput();
 
 	virtual ~GLFWViewer() override 
 	{
