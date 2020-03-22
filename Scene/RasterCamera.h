@@ -10,7 +10,11 @@ enum Camera_Movement {
     LEFT,
     RIGHT,
 	UP,
-	DOWN
+	DOWN,
+	YAWLEFT,
+	YAWRIGHT,
+	PITCHUP,
+	PITCHDOWN
 };
 
 class RasterCamera
@@ -64,6 +68,22 @@ public:
 			m_cameraPosition -= m_cameraUp * velocity;
 		if (direction == DOWN)
 			m_cameraPosition += m_cameraUp * velocity;
+		if (direction == YAWLEFT) {
+			m_cameraYaw += 1.0f;
+			UpdateBasisAxis();
+		}
+		if (direction == YAWRIGHT) {
+			m_cameraYaw -= 1.0f;
+			UpdateBasisAxis();
+		}
+		if (direction == PITCHUP) {
+			m_cameraPitch -= 1.0f;
+			UpdateBasisAxis();
+		}
+		if (direction == PITCHDOWN) {
+			m_cameraPitch += 1.0f;
+			UpdateBasisAxis();
+		}
 	}
 
 	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.

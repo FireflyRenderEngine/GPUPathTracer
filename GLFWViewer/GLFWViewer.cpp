@@ -122,7 +122,16 @@ void GLFWViewer::ProcessKeyboardInput()
 		m_scene->m_rasterCamera->ProcessKeyboard(UP);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_E) == GLFW_PRESS)
 		m_scene->m_rasterCamera->ProcessKeyboard(DOWN);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_RIGHT) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(YAWRIGHT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_LEFT) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(YAWLEFT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_UP) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(PITCHUP);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_DOWN) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(PITCHDOWN);
 }
+
 
 std::string GetShaderCode(std::string filePath) {	
 	// Read the Vertex Shader code from the file
