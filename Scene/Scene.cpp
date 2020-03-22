@@ -100,8 +100,7 @@ void Scene::LoadScene(std::string fllePath) {
 
     // Initialize the camers
     glm::vec3 cameraPosition = glm::vec3(0.0f, 5.0f, 10.0f);
-    glm::vec3 cameraLookAtPoint = glm::vec3(0.0f, 0.0f, 0.0f);
-    std::shared_ptr<Camera> camera = std::make_shared<Camera>(cameraPosition, cameraLookAtPoint, m_screenWidth, m_screenHeight);
+    std::shared_ptr<Camera> camera = std::make_shared<Camera>(cameraPosition, m_screenWidth, m_screenHeight);
     m_cameras.push_back(camera);
 
     // TODO: LOAD MATERIALS AND OTHER STUFF

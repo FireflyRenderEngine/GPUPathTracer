@@ -108,6 +108,19 @@ bool GLFWViewer::render()
 void GLFWViewer::ProcessInput()
 {
 	// TODO: process any key presses
+	if (glfwGetKey(m_window.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+		glfwSetWindowShouldClose(m_window.get(), true);
+
+	if (glfwGetKey(m_window.get(), GLFW_KEY_W) == GLFW_PRESS)
+		m_scene->m_cameras[0]->ProcessKeyboard(FORWARD);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_S) == GLFW_PRESS)
+		m_scene->m_cameras[0]->ProcessKeyboard(BACKWARD);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_A) == GLFW_PRESS)
+		m_scene->m_cameras[0]->ProcessKeyboard(LEFT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_Q) == GLFW_PRESS)
+		m_scene->m_cameras[0]->ProcessKeyboard(UP);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_E) == GLFW_PRESS)
+		m_scene->m_cameras[0]->ProcessKeyboard(DOWN);
 }
 
 std::string GetShaderCode(std::string filePath) {	
@@ -232,6 +245,7 @@ void GLFWViewer::UpdateViewMatrix() {
 	glm::mat4 viewMatrix = m_scene->m_cameras[0]->GetViewMatrix();
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(viewMatrix));
 }
+
 
 void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) {
 	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "modelMatrix");
