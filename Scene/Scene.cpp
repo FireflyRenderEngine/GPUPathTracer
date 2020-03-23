@@ -1,5 +1,6 @@
 #include "Scene.h"
 #include "Geometry.h"
+#include "TriangleMesh.h"
 #include "RasterCamera.h"
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
@@ -92,7 +93,7 @@ void Scene::LoadOBJ(std::string fllePath) {
         glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
         glm::vec3 rotation = glm::vec3(0.0f, 0.0f, 0.0f);
         glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
-        std::shared_ptr<Geometry> geometry = std::make_shared<Geometry>(vertices, normals, uvs, triangleIndices, position, rotation, scale);
+        std::shared_ptr<Geometry> geometry = std::make_shared<TriangleMesh>(GeometryType::TRIANGLEMESH , position, rotation, scale, vertices, normals, uvs, triangleIndices);
         m_geometries.push_back(geometry);
 
         // TODO: Load Material

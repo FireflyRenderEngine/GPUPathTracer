@@ -88,7 +88,7 @@
     <ClInclude Include="AccelerationStructure.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="Scene.h" />
-    <ClInclude Include="Triangle.h" />
+    <ClInclude Include="TriangleMesh.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Scene.cpp" />
