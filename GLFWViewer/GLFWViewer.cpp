@@ -6,6 +6,9 @@
 #include "GLFWViewer.h"
 #include "../Scene/Geometry.h"
 #include "../Scene/TriangleMesh.h"
+#include "../Scene/Cube.h"
+#include "../Scene/Plane.h"
+#include "../Scene/Sphere.h"
 #include "../Scene/RasterCamera.h"
 #include "../glm-0.9.9.7/gtc/type_ptr.hpp"
 #include <sstream>
@@ -205,45 +208,43 @@ bool GLFWViewer::Create() {
 		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
 		glGetShaderInfoLog(m_shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
 		return false;
-	}	
+	}
 
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
 	// We will loop over the geometries and store the mesh data in GL Pointers
-	for (int geometryIndex = 0; geometryIndex < m_scene->m_geometries.size(); geometryIndex++) {
+	for (int geometryIndex = 0; geometryIndex < m_scene->m_geometries.size(); geometryIndex++)
+	{
 		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
-		if (geometryPtr->GetGeomtryType() == GeometryType::TRIANGLEMESH) {
-			std::shared_ptr<TriangleMesh> triangleMeshGeometryPtr = std::static_pointer_cast<TriangleMesh>(geometryPtr);
+		
+		unsigned int VAO;
+		glGenVertexArrays(1, &VAO);
+		glBindVertexArray(VAO);
 
-			unsigned int VAO;
-			glGenVertexArrays(1, &VAO);
-			glBindVertexArray(VAO);
+		// Set the VBO for the vertex buffer data
+		unsigned int VBOVertexPos;
+		glGenBuffers(1, &VBOVertexPos);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * geometryPtr->m_vertices.size(), &(geometryPtr->m_vertices[0]), GL_STATIC_DRAW);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
 
-			// Set the VBO for the vertex buffer data
-			unsigned int VBOVertexPos;
-			glGenBuffers(1, &VBOVertexPos);
-			glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * triangleMeshGeometryPtr->m_vertices.size(), &(triangleMeshGeometryPtr->m_vertices[0]), GL_STATIC_DRAW);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-			glEnableVertexAttribArray(0);
+		unsigned int VBOVertexUV;
+		glGenBuffers(1, &VBOVertexUV);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * geometryPtr->m_uvs.size(), &(geometryPtr->m_uvs[0]), GL_STATIC_DRAW);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
 
-			unsigned int VBOVertexUV;
-			glGenBuffers(1, &VBOVertexUV);
-			glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * triangleMeshGeometryPtr->m_uvs.size(), &(triangleMeshGeometryPtr->m_uvs[0]), GL_STATIC_DRAW);
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-			glEnableVertexAttribArray(1);
+		unsigned int VBOVertexNormals;
+		glGenBuffers(1, &VBOVertexNormals);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexNormals);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * geometryPtr->m_normals.size(), &(geometryPtr->m_normals[0]), GL_STATIC_DRAW);
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(2);
 
-			unsigned int VBOVertexNormals;
-			glGenBuffers(1, &VBOVertexNormals);
-			glBindBuffer(GL_ARRAY_BUFFER, VBOVertexNormals);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * triangleMeshGeometryPtr->m_normals.size(), &(triangleMeshGeometryPtr->m_normals[0]), GL_STATIC_DRAW);
-			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-			glEnableVertexAttribArray(2);
-
-			m_VAOS.push_back(VAO);
-		}
+		m_VAOS.push_back(VAO);
 	}
 
 	success = true;
@@ -279,11 +280,8 @@ bool GLFWViewer::Draw() {
 		glBindVertexArray(m_VAOS[geometryIndex]);
 		// Bind the Model Matrix corrosponding to the current Geometry
 		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
-		if (geometryPtr->GetGeomtryType() == GeometryType::TRIANGLEMESH) {
-			std::shared_ptr<TriangleMesh> triangleMeshGeometryPtr = std::static_pointer_cast<TriangleMesh>(geometryPtr);
-			SetGeometryModelMatrix(triangleMeshGeometryPtr->m_modelMatrix);
-			glDrawArrays(GL_TRIANGLES, 0, triangleMeshGeometryPtr->m_triangleIndices.size());
-		}
+		SetGeometryModelMatrix(geometryPtr->m_modelMatrix);
+		glDrawArrays(GL_TRIANGLES, 0, geometryPtr->m_triangleIndices.size());
 	} 
 
 	success = true;
