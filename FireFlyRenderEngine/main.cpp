@@ -46,10 +46,7 @@ int main(int argc, char* argv[])
 	}
 	// END TEST
 	
-	
 	scene->SetRasterCamera(glm::vec3(0.0f, 5.0f, 10.0f));
-
-
 
 	// Calls renderer
 	// gets film

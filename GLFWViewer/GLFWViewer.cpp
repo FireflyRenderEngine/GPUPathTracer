@@ -256,6 +256,8 @@ bool GLFWViewer::Create() {
 		m_randomColorPerGeometry.push_back(glm::vec3(dis(gen), dis(gen), dis(gen)));
 	}
 
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 	success = true;
 	return success;
 }
@@ -290,6 +292,7 @@ void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix)
 bool GLFWViewer::Draw() {
 	bool success = false;
 
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// Loop over the mesh 
 	glUseProgram(m_shaderProgram);
 	UpdateProjectionMatrix();
