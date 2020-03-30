@@ -11,6 +11,7 @@
 #include "../Scene/Sphere.h"
 #include "../Scene/RasterCamera.h"
 #include "../glm-0.9.9.7/gtc/type_ptr.hpp"
+#include <random>
 #include <sstream>
 #include <fstream>
 
@@ -213,6 +214,11 @@ bool GLFWViewer::Create() {
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
+	// Seed the random number generator for creating random colors for geometries
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_real_distribution<> dis(0.0, 1.0);
+
 	// We will loop over the geometries and store the mesh data in GL Pointers
 	for (int geometryIndex = 0; geometryIndex < m_scene->m_geometries.size(); geometryIndex++)
 	{
@@ -245,26 +251,38 @@ bool GLFWViewer::Create() {
 		glEnableVertexAttribArray(2);
 
 		m_VAOS.push_back(VAO);
+		
+		// Set the color for the geometry to be visualized in the OpenGL Viewer
+		m_randomColorPerGeometry.push_back(glm::vec3(dis(gen), dis(gen), dis(gen)));
 	}
 
 	success = true;
 	return success;
 }
 
-void GLFWViewer::UpdateProjectionMatrix() {
+void GLFWViewer::UpdateProjectionMatrix() 
+{
 	int projectionMatrixLocation = glGetUniformLocation(m_shaderProgram, "projectionMatrix");
 	glm::mat4 projectionMatrix = m_scene->m_rasterCamera->GetProjectionMatrix();
 	glUniformMatrix4fv(projectionMatrixLocation, 1, false, glm::value_ptr(projectionMatrix));
 }
 
-void GLFWViewer::UpdateViewMatrix() {
+void GLFWViewer::SetGeometryColor(int geometryIndex)
+{
+	int geometryColorLocation = glGetUniformLocation(m_shaderProgram, "geometryColor");
+	glUniform3fv(geometryColorLocation, 1, &(m_randomColorPerGeometry[geometryIndex][0]));
+}
+
+void GLFWViewer::UpdateViewMatrix() 
+{
 	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "viewMatrix");
 	glm::mat4 viewMatrix = m_scene->m_rasterCamera->GetViewMatrix();
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(viewMatrix));
 }
 
 
-void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) {
+void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) 
+{
 	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "modelMatrix");
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(modelMatrix));
 }
@@ -281,6 +299,7 @@ bool GLFWViewer::Draw() {
 		// Bind the Model Matrix corrosponding to the current Geometry
 		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
 		SetGeometryModelMatrix(geometryPtr->m_modelMatrix);
+		SetGeometryColor(geometryIndex);
 		glDrawArrays(GL_TRIANGLES, 0, geometryPtr->m_triangleIndices.size());
 	} 
 

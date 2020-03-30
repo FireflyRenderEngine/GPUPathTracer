@@ -46,22 +46,22 @@ float Scene::GetScreenHeight()
     return m_screenHeight;
 }
 
-bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string fllePath) {
+bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string filePath) {
     // Handle predefined geometry file paths
     switch (geometryType)
     {
         case GeometryType::SPHERE :
-            fllePath = R"(..\SceneResources\sphere.obj)";
+            filePath = R"(..\SceneResources\sphere.obj)";
             break;
         case GeometryType::CUBE:
-            fllePath = R"(..\SceneResources\cube.obj)";
+            filePath = R"(..\SceneResources\cube.obj)";
             break;
         case GeometryType::PLANE:
-            fllePath = R"(..\SceneResources\plane.obj)";
+            filePath = R"(..\SceneResources\plane.obj)";
             break;
         default:
             // If the geometry type is not among the supported type or is a triangle mesh and the file path is empty return false
-            if (geometryType != GeometryType::TRIANGLEMESH || fllePath == "") {
+            if (geometryType != GeometryType::TRIANGLEMESH || filePath == "") {
                 return false;
             }
             break;
@@ -74,7 +74,9 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
     std::string warn;
     std::string err;
 
-    bool ret = tinyobj::LoadObj(&geometryAttributes, &geometries, nullptr, &warn, &err, fllePath.c_str());
+    if (tinyobj::LoadObj(&geometryAttributes, &geometries, nullptr, &warn, &err, filePath.c_str()) == false) {
+        return false;
+    }
 
     // NOTE: We currently only support triangle geometries
     // Loop over Geometries
@@ -137,6 +139,8 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
     }
 
     // TODO: LOAD MATERIALS AND OTHER STUFF
+
+    return true;
 }
 
 void Scene::SetRasterCamera(glm::vec3 cameraPosition) {

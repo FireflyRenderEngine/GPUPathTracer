@@ -30,7 +30,7 @@ public:
 	virtual void UpdateViewMatrix();
 	virtual void SetGeometryModelMatrix(glm::mat4 modelMatrix);
 	virtual void UpdateProjectionMatrix();
-
+	virtual void SetGeometryColor(int geometryIndex);
 
 	// This function is used to check & deal with any key press events
 	void ProcessKeyboardInput();
@@ -44,5 +44,6 @@ private:
 
 	// The set of VAO's assiciated with the vertex buffer data
 	std::vector<unsigned int> m_VAOS;
+	std::vector<glm::vec3> m_randomColorPerGeometry;
 	unsigned int m_shaderProgram;
 };
