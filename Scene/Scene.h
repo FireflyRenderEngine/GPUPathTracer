@@ -15,6 +15,7 @@
 #include "AccelerationStructure.h"
 #include "vec3.hpp"
 
+enum GeometryType;
 class Geometry;
 class Material;
 class RasterCamera;
@@ -30,7 +31,10 @@ public:
 	float GetScreenWidth();
 	float GetScreenHeight();
 
-	void LoadOBJ(std::string filePath);
+	// To load the geometry define its type, position, rotation along axis, scale and file path to the geometry.
+	// The file path by default is empty string and should not be provided for standard SPHERE, PLANE, CUBE geometry. It should only be provided for custom user triangle mesh.
+	bool LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string filePath = "");
+	
 	void SetRasterCamera(glm::vec3 cameraPosition);
 
 	std::vector<std::shared_ptr<Geometry>> m_geometries;

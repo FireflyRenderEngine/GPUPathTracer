@@ -6,7 +6,7 @@
 #include <vector>
 #include <memory>
 
-enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, RECTANGLE};
+enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, PLANE};
 
 class Geometry
 {
@@ -48,7 +48,6 @@ public:
 		m_modelMatrix = glm::mat4(1.0f);
 		m_modelMatrix *= translate * rotate * scale;
 	}
-
 
 	glm::mat4 m_modelMatrix;
 	glm::vec3 m_geometryPosition;

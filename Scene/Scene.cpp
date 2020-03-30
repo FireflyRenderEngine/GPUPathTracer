@@ -1,6 +1,9 @@
 #include "Scene.h"
 #include "Geometry.h"
 #include "TriangleMesh.h"
+#include "Plane.h"
+#include "Cube.h"
+#include "Sphere.h"
 #include "RasterCamera.h"
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
@@ -43,7 +46,27 @@ float Scene::GetScreenHeight()
     return m_screenHeight;
 }
 
-void Scene::LoadOBJ(std::string fllePath) {
+bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string fllePath) {
+    // Handle predefined geometry file paths
+    switch (geometryType)
+    {
+        case GeometryType::SPHERE :
+            fllePath = R"(..\SceneResources\sphere.obj)";
+            break;
+        case GeometryType::CUBE:
+            fllePath = R"(..\SceneResources\cube.obj)";
+            break;
+        case GeometryType::PLANE:
+            fllePath = R"(..\SceneResources\plane.obj)";
+            break;
+        default:
+            // If the geometry type is not among the supported type or is a triangle mesh and the file path is empty return false
+            if (geometryType != GeometryType::TRIANGLEMESH || fllePath == "") {
+                return false;
+            }
+            break;
+    }
+    
     // Load & insert the geometries 
     tinyobj::attrib_t geometryAttributes;
     std::vector<tinyobj::shape_t> geometries;
@@ -89,12 +112,26 @@ void Scene::LoadOBJ(std::string fllePath) {
         }
 
         // Initialze the geometry
-        // Initialize geometry's transforms
-        glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 rotation = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
-        std::shared_ptr<Geometry> geometry = std::make_shared<TriangleMesh>(GeometryType::TRIANGLEMESH , position, rotation, scale, vertices, normals, uvs, triangleIndices);
+        std::shared_ptr<Geometry> geometry;
+        switch (geometryType)
+        {
+        case GeometryType::SPHERE:
+            geometry = std::make_shared<Sphere>(geometryType, position, rotationAlongAxis, scale, vertices, normals, uvs, triangleIndices);
+            break;
+        case GeometryType::CUBE:
+            geometry = std::make_shared<Cube>(geometryType, position, rotationAlongAxis, scale, vertices, normals, uvs, triangleIndices);
+            break;
+        case GeometryType::PLANE:
+            geometry = std::make_shared<Plane>(geometryType, position, rotationAlongAxis, scale, vertices, normals, uvs, triangleIndices);
+            break;
+        case GeometryType::TRIANGLEMESH:
+            geometry = std::make_shared<TriangleMesh>(geometryType, position, rotationAlongAxis, scale, vertices, normals, uvs, triangleIndices);
+            break;
+        default:
+            break;
+        }
         m_geometries.push_back(geometry);
+
 
         // TODO: Load Material
     }

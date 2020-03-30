@@ -83,11 +83,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="Cube.h" />
+    <ClInclude Include="Plane.h" />
     <ClInclude Include="RasterCamera.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="AccelerationStructure.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="Scene.h" />
+    <ClInclude Include="Sphere.h" />
     <ClInclude Include="TriangleMesh.h" />
   </ItemGroup>
   <ItemGroup>
