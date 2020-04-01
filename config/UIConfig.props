@@ -3,18 +3,15 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="AllConfig.props" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros">
-    <GLFW_VER>glfw-3.3.2</GLFW_VER>
-    <GLEW_VER>glew-2.1.0</GLEW_VER>
-  </PropertyGroup>
+  <PropertyGroup Label="UserMacros" />
   <PropertyGroup />
   <ItemDefinitionGroup>
     <Link>
-      <AdditionalLibraryDirectories>$(LIB_DIR)\$(GLFW_VER);$(LIB_DIR)\$(GLEW_VER);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glew32.lib;glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(LIB_DIR)\$(GLFW_VER);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLFW_VER);$(INCLUDE_DIR)\$(GLEW_VER);$(SolutionDir)Viewer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLFW_VER);$(INCLUDE_DIR)\$(GLAD_VER);$(SolutionDir)Viewer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <PreLinkEvent>
       <Command>if not exist "$(SolutionDir)$(Platform)\$(Configuration)\glfw3.dll" (
@@ -27,12 +24,5 @@ if not exist "$(SolutionDir)$(Platform)\$(Configuration)\glew32.dll" (
 )</Command>
     </PreLinkEvent>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <BuildMacro Include="GLFW_VER">
-      <Value>$(GLFW_VER)</Value>
-    </BuildMacro>
-    <BuildMacro Include="GLEW_VER">
-      <Value>$(GLEW_VER)</Value>
-    </BuildMacro>
-  </ItemGroup>
+  <ItemGroup />
 </Project>
