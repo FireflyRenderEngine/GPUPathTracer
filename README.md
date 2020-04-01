@@ -11,4 +11,5 @@ A sophisticated GPU Path Tracer.
    - Sphere
    - Plane
    - Cube
+   
 ![G L F W Viewer](GitContent/GLFWViewer.gif)
