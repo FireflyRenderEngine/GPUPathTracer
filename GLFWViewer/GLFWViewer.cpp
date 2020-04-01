@@ -10,7 +10,7 @@
 #include "../Scene/Plane.h"
 #include "../Scene/Sphere.h"
 #include "../Scene/RasterCamera.h"
-#include "../glm-0.9.9.7/gtc/type_ptr.hpp"
+#include "gtc/type_ptr.hpp"
 #include <random>
 #include <sstream>
 #include <fstream>
@@ -165,7 +165,8 @@ bool GLFWViewer::Create() {
 	// Compile Vertex Shader
 	unsigned int vertexShader;
 	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	std::string vertexShaderFilePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\VertexShader.glsl)";
+	std::string projectPath = SOLUTION_DIR;
+	std::string vertexShaderFilePath = projectPath + R"(SceneResources\VertexShader.glsl)";
 	std::string vertexShaderSource = GetShaderCode(vertexShaderFilePath);
 
 	char const* vertexSourcePointer = vertexShaderSource.c_str();
@@ -184,7 +185,7 @@ bool GLFWViewer::Create() {
 	// Compile Fragment Shader
 	unsigned int fragmentShader;
 	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	std::string fragmentShaderFilePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\FragmentShader.glsl)";
+	std::string fragmentShaderFilePath = projectPath + R"(SceneResources\FragmentShader.glsl)";
 	std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
 
 	char const* fragmentSourcePointer = fragmentShaderSource.c_str();

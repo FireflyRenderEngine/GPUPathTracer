@@ -3,7 +3,7 @@
 #include "../Viewer/Viewer.h"
 #include <glad.h>
 #include <glfw3.h>
-#include "../glm-0.9.9.7/mat4x4.hpp"
+#include "mat4x4.hpp"
 
 #include <memory>
 
