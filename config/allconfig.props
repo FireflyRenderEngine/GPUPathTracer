@@ -6,6 +6,9 @@
     <LIB_DIR>$(SolutionDir)external\lib</LIB_DIR>
     <BIN_DIR>$(SolutionDir)external\bin</BIN_DIR>
     <GLM_VER>glm-0.9.9.7</GLM_VER>
+    <GLAD_VER>glad-0.1.33</GLAD_VER>
+    <GLFW_VER>glfw-3.3.2</GLFW_VER>
+    <KHR_VER>KHR-2018</KHR_VER>
   </PropertyGroup>
   <PropertyGroup>
     <_PropertySheetDisplayName>AllConfig</_PropertySheetDisplayName>
@@ -28,6 +31,7 @@
     </CustomBuildStep>
     <ClCompile>
       <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SOLUTION_DIR=R"($(SolutionDir))";%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -42,6 +46,15 @@
     </BuildMacro>
     <BuildMacro Include="GLM_VER">
       <Value>$(GLM_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="GLAD_VER">
+      <Value>$(GLAD_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="GLFW_VER">
+      <Value>$(GLFW_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="KHR_VER">
+      <Value>$(KHR_VER)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

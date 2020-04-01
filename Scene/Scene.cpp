@@ -48,16 +48,17 @@ float Scene::GetScreenHeight()
 
 bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string filePath) {
     // Handle predefined geometry file paths
+    std::string projectPath = SOLUTION_DIR;
     switch (geometryType)
     {
         case GeometryType::SPHERE :
-            filePath = R"(..\SceneResources\sphere.obj)";
+            filePath = projectPath + R"(SceneResources\sphere.obj)";
             break;
         case GeometryType::CUBE:
-            filePath = R"(..\SceneResources\cube.obj)";
+            filePath = projectPath + R"(SceneResources\cube.obj)";
             break;
         case GeometryType::PLANE:
-            filePath = R"(..\SceneResources\plane.obj)";
+            filePath = projectPath + R"(SceneResources\plane.obj)";
             break;
         default:
             // If the geometry type is not among the supported type or is a triangle mesh and the file path is empty return false
