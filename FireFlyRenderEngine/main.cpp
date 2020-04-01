@@ -2,7 +2,7 @@
 #include <iostream>
 #include "Scene/Scene.h"
 #include "GLFWViewer/GLFWViewer.h"
-#include "../glm-0.9.9.7/vec3.hpp"
+#include "vec3.hpp"
 #include <Scene/Geometry.h>
 
 int main(int argc, char* argv[])

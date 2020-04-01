@@ -101,9 +101,9 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
                 // access to vertex
                 tinyobj::index_t idx = geometries[geometryIndex].mesh.indices[index_offset + attributeIndex];
 
-                glm::vec3 vertexPosition(geometryAttributes.vertices[3.0f * idx.vertex_index + 0], geometryAttributes.vertices[3.0f * idx.vertex_index + 1], geometryAttributes.vertices[3.0f * idx.vertex_index + 2]);
-                glm::vec3 vertexNormals(geometryAttributes.normals[3.0f * idx.normal_index + 0], geometryAttributes.normals[3.0f * idx.normal_index + 1], geometryAttributes.normals[3.0f * idx.normal_index + 2]);
-                glm::vec2 vertexUVs(geometryAttributes.texcoords[2.0f * idx.texcoord_index + 0], geometryAttributes.texcoords[2.0f * idx.texcoord_index + 1]);
+                glm::vec3 vertexPosition(geometryAttributes.vertices[3 * idx.vertex_index + 0], geometryAttributes.vertices[3 * idx.vertex_index + 1], geometryAttributes.vertices[3 * idx.vertex_index + 2]);
+                glm::vec3 vertexNormals(geometryAttributes.normals[3 * idx.normal_index + 0], geometryAttributes.normals[3 * idx.normal_index + 1], geometryAttributes.normals[3 * idx.normal_index + 2]);
+                glm::vec2 vertexUVs(geometryAttributes.texcoords[2 * idx.texcoord_index + 0], geometryAttributes.texcoords[2 * idx.texcoord_index + 1]);
 
                 vertices.push_back(vertexPosition);
                 normals.push_back(vertexNormals);
