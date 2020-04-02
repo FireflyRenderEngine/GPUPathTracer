@@ -2,6 +2,8 @@
 #include <iostream>
 #include "Scene/Scene.h"
 #include "GLFWViewer/GLFWViewer.h"
+#include "vec3.hpp"
+#include <Scene/Geometry.h>
 
 int main(int argc, char* argv[])
 {
@@ -10,9 +12,8 @@ int main(int argc, char* argv[])
 
 	// sets up scene
 	std::shared_ptr<Scene> scene = std::make_shared<Scene>();
-	std::string filePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\cube.obj)";
 	scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
-	scene->LoadScene(filePath);
+	scene->SetRasterCamera(glm::vec3(0.0f, 5.0f, 10.0f));
 
 	// Calls renderer
 	// gets film

@@ -1,18 +1,20 @@
 #pragma once
-#include "../glm-0.9.9.7/vec3.hpp"
-#include "../glm-0.9.9.7/vec2.hpp"
-#include "../glm-0.9.9.7//mat4x4.hpp"
-#include "../glm-0.9.9.7/gtc/matrix_transform.hpp"
+#include "vec3.hpp"
+#include "vec2.hpp"
+#include "mat4x4.hpp"
+#include "gtc/matrix_transform.hpp"
 #include <vector>
 #include <memory>
+
+enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, PLANE};
 
 class Geometry
 {
 public:
 	Geometry() {}
 
-	Geometry(std::vector<glm::vec3> vertices, std::vector<glm::vec3> normals, std::vector<glm::vec2> uvs, std::vector<int> triangleIndices, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale)
-		: m_vertices(vertices), m_normals(normals), m_uvs(uvs), m_triangleIndices(triangleIndices), m_geometryPosition(position), m_geometryRotationAngleAlongAxis(rotationAlongAxis), m_geometryScale(scale) 
+	Geometry(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::vector<glm::vec3> vertices, std::vector<glm::vec3> normals, std::vector<glm::vec2> uvs, std::vector<int> triangleIndices)
+		:  m_geometryType(geometryType), m_geometryPosition(position), m_geometryRotationAngleAlongAxis(rotationAlongAxis), m_geometryScale(scale), m_vertices(vertices), m_normals(normals), m_uvs(uvs), m_triangleIndices(triangleIndices)
 	{
 		SetModelMatrix();
 	}
@@ -20,6 +22,11 @@ public:
 	glm::mat4 GetMeshModelMatrix()
 	{
 		return m_modelMatrix;
+	}
+
+	GeometryType GetGeomtryType() 
+	{
+		return m_geometryType;
 	}
 
 	void SetModelMatrix() {
@@ -42,12 +49,14 @@ public:
 		m_modelMatrix *= translate * rotate * scale;
 	}
 
-	std::vector<glm::vec3> m_vertices;
-	std::vector<glm::vec2> m_uvs;
-	std::vector<glm::vec3> m_normals;
-	std::vector<int> m_triangleIndices;
 	glm::mat4 m_modelMatrix;
 	glm::vec3 m_geometryPosition;
 	glm::vec3 m_geometryRotationAngleAlongAxis;
 	glm::vec3 m_geometryScale;
+	std::vector<glm::vec3> m_vertices;
+	std::vector<glm::vec2> m_uvs;
+	std::vector<glm::vec3> m_normals;
+	std::vector<int> m_triangleIndices;
+	GeometryType m_geometryType;
 };
+

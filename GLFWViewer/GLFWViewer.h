@@ -3,7 +3,7 @@
 #include "../Viewer/Viewer.h"
 #include <glad.h>
 #include <glfw3.h>
-#include "../glm-0.9.9.7/mat4x4.hpp"
+#include "mat4x4.hpp"
 
 #include <memory>
 
@@ -30,10 +30,10 @@ public:
 	virtual void UpdateViewMatrix();
 	virtual void SetGeometryModelMatrix(glm::mat4 modelMatrix);
 	virtual void UpdateProjectionMatrix();
-
+	virtual void SetGeometryColor(int geometryIndex);
 
 	// This function is used to check & deal with any key press events
-	void ProcessInput();
+	void ProcessKeyboardInput();
 
 	virtual ~GLFWViewer() override 
 	{
@@ -44,5 +44,6 @@ private:
 
 	// The set of VAO's assiciated with the vertex buffer data
 	std::vector<unsigned int> m_VAOS;
+	std::vector<glm::vec3> m_randomColorPerGeometry;
 	unsigned int m_shaderProgram;
 };

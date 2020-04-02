@@ -5,11 +5,15 @@
 #include "framework.h"
 #include "GLFWViewer.h"
 #include "../Scene/Geometry.h"
-#include "../Scene/Camera.h"
-#include "../glm-0.9.9.7/gtc/type_ptr.hpp"
+#include "../Scene/TriangleMesh.h"
+#include "../Scene/Cube.h"
+#include "../Scene/Plane.h"
+#include "../Scene/Sphere.h"
+#include "../Scene/RasterCamera.h"
+#include "gtc/type_ptr.hpp"
+#include <random>
 #include <sstream>
 #include <fstream>
-
 
 // The following set of functions are defined as overloads as the callbacks to different events triggered by GLFW
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -91,7 +95,7 @@ bool GLFWViewer::render()
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		ProcessInput();
+		ProcessKeyboardInput();
 
 		// Rendering commands for drawing to the screen
 		Draw();
@@ -105,10 +109,34 @@ bool GLFWViewer::render()
 	return false;
 }
 
-void GLFWViewer::ProcessInput()
+void GLFWViewer::ProcessKeyboardInput()
 {
-	// TODO: process any key presses
+	// process any key presses
+	if (glfwGetKey(m_window.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+		glfwSetWindowShouldClose(m_window.get(), true);
+
+	if (glfwGetKey(m_window.get(), GLFW_KEY_W) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(FORWARD);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_S) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(BACKWARD);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_A) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(LEFT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_D) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(RIGHT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_Q) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(UP);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_E) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(DOWN);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_RIGHT) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(YAWRIGHT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_LEFT) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(YAWLEFT);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_UP) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(PITCHUP);
+	if (glfwGetKey(m_window.get(), GLFW_KEY_DOWN) == GLFW_PRESS)
+		m_scene->m_rasterCamera->ProcessKeyboard(PITCHDOWN);
 }
+
 
 std::string GetShaderCode(std::string filePath) {	
 	// Read the Vertex Shader code from the file
@@ -137,7 +165,8 @@ bool GLFWViewer::Create() {
 	// Compile Vertex Shader
 	unsigned int vertexShader;
 	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	std::string vertexShaderFilePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\VertexShader.glsl)";
+	std::string projectPath = SOLUTION_DIR;
+	std::string vertexShaderFilePath = projectPath + R"(SceneResources\VertexShader.glsl)";
 	std::string vertexShaderSource = GetShaderCode(vertexShaderFilePath);
 
 	char const* vertexSourcePointer = vertexShaderSource.c_str();
@@ -156,7 +185,7 @@ bool GLFWViewer::Create() {
 	// Compile Fragment Shader
 	unsigned int fragmentShader;
 	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	std::string fragmentShaderFilePath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\SceneResources\FragmentShader.glsl)";
+	std::string fragmentShaderFilePath = projectPath + R"(SceneResources\FragmentShader.glsl)";
 	std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
 
 	char const* fragmentSourcePointer = fragmentShaderSource.c_str();
@@ -181,13 +210,21 @@ bool GLFWViewer::Create() {
 		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
 		glGetShaderInfoLog(m_shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
 		return false;
-	}	
+	}
 
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
+	// Seed the random number generator for creating random colors for geometries
+	std::random_device rd;  //Will be used to obtain a seed for the random number engine
+	std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+	std::uniform_real_distribution<> dis(0.0, 1.0);
+
 	// We will loop over the geometries and store the mesh data in GL Pointers
-	for (int geometryIndex = 0; geometryIndex < m_scene->m_geometries.size(); geometryIndex++) {
+	for (int geometryIndex = 0; geometryIndex < m_scene->m_geometries.size(); geometryIndex++)
+	{
+		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
+		
 		unsigned int VAO;
 		glGenVertexArrays(1, &VAO);
 		glBindVertexArray(VAO);
@@ -196,44 +233,59 @@ bool GLFWViewer::Create() {
 		unsigned int VBOVertexPos;
 		glGenBuffers(1, &VBOVertexPos);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * m_scene->m_geometries[geometryIndex]->m_vertices.size(), &(m_scene->m_geometries[geometryIndex]->m_vertices[0]), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * geometryPtr->m_vertices.size(), &(geometryPtr->m_vertices[0]), GL_STATIC_DRAW);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(0);
 
 		unsigned int VBOVertexUV;
 		glGenBuffers(1, &VBOVertexUV);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * m_scene->m_geometries[geometryIndex]->m_uvs.size(), &(m_scene->m_geometries[geometryIndex]->m_uvs[0]), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * geometryPtr->m_uvs.size(), &(geometryPtr->m_uvs[0]), GL_STATIC_DRAW);
 		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(1);
 
 		unsigned int VBOVertexNormals;
 		glGenBuffers(1, &VBOVertexNormals);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexNormals);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * m_scene->m_geometries[geometryIndex]->m_normals.size(), &(m_scene->m_geometries[geometryIndex]->m_normals[0]), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * geometryPtr->m_normals.size(), &(geometryPtr->m_normals[0]), GL_STATIC_DRAW);
 		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(2);
 
 		m_VAOS.push_back(VAO);
+		
+		// Set the color for the geometry to be visualized in the OpenGL Viewer
+		m_randomColorPerGeometry.push_back(glm::vec3(dis(gen), dis(gen), dis(gen)));
 	}
 
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 	success = true;
 	return success;
 }
 
-void GLFWViewer::UpdateProjectionMatrix() {
+void GLFWViewer::UpdateProjectionMatrix() 
+{
 	int projectionMatrixLocation = glGetUniformLocation(m_shaderProgram, "projectionMatrix");
-	glm::mat4 projectionMatrix = m_scene->m_cameras[0]->GetProjectionMatrix();
+	glm::mat4 projectionMatrix = m_scene->m_rasterCamera->GetProjectionMatrix();
 	glUniformMatrix4fv(projectionMatrixLocation, 1, false, glm::value_ptr(projectionMatrix));
 }
 
-void GLFWViewer::UpdateViewMatrix() {
+void GLFWViewer::SetGeometryColor(int geometryIndex)
+{
+	int geometryColorLocation = glGetUniformLocation(m_shaderProgram, "geometryColor");
+	glUniform3fv(geometryColorLocation, 1, &(m_randomColorPerGeometry[geometryIndex][0]));
+}
+
+void GLFWViewer::UpdateViewMatrix() 
+{
 	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "viewMatrix");
-	glm::mat4 viewMatrix = m_scene->m_cameras[0]->GetViewMatrix();
+	glm::mat4 viewMatrix = m_scene->m_rasterCamera->GetViewMatrix();
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(viewMatrix));
 }
 
-void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) {
+
+void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) 
+{
 	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "modelMatrix");
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(modelMatrix));
 }
@@ -241,6 +293,7 @@ void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) {
 bool GLFWViewer::Draw() {
 	bool success = false;
 
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// Loop over the mesh 
 	glUseProgram(m_shaderProgram);
 	UpdateProjectionMatrix();
@@ -248,8 +301,10 @@ bool GLFWViewer::Draw() {
 	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) {
 		glBindVertexArray(m_VAOS[geometryIndex]);
 		// Bind the Model Matrix corrosponding to the current Geometry
-		SetGeometryModelMatrix(m_scene->m_geometries[geometryIndex]->m_modelMatrix);
-		glDrawArrays(GL_TRIANGLES, 0, m_scene->m_geometries[geometryIndex]->m_triangleIndices.size());
+		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
+		SetGeometryModelMatrix(geometryPtr->m_modelMatrix);
+		SetGeometryColor(geometryIndex);
+		glDrawArrays(GL_TRIANGLES, 0, geometryPtr->m_triangleIndices.size());
 	} 
 
 	success = true;
