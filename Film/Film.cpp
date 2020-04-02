@@ -1,19 +1,22 @@
 #include "pch.h"
 #include "Film.h"
 
-#include <OpenEXR/IlmImf/ImfRgbaFile.h>
-#include <OpenEXR/IlmImf/ImfArray.h>
 
-#include <OpenEXR/IlmImf/ImfNamespace.h>
+Film::Film(int width, int height)
+	: m_width(width), m_height(height)
+{
+	m_pixels = new Rgba[width * height];
+}
 
-namespace IMF = OPENEXR_IMF_NAMESPACE;
-using namespace IMF;
-using namespace IMATH_NAMESPACE;
+Film::~Film()
+{
+	delete m_pixels;
+}
 
 bool Film::saveAsEXR(std::string filename)
 {
-	RgbaOutputFile file(filename.c_str(), 1024, 768);
-	/*file.setFrameBuffer(pixels, 1, width);
-	file.writePixels(height);*/
-	return false;
+	RgbaOutputFile file(filename.c_str(), m_width, m_height);
+	file.setFrameBuffer(m_pixels, 1, m_width);
+	file.writePixels(m_height);
+	return true;
 }
