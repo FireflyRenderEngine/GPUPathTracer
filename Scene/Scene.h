@@ -38,7 +38,7 @@ public:
 	void SetRasterCamera(glm::vec3 cameraPosition);
 
 	std::vector<std::shared_ptr<Geometry>> m_geometries;
-	std::vector<int> m_emmitterGeometryIndices;
+	std::vector<int> m_emitterGeometryIndices;
 	std::vector<std::shared_ptr<Material>> m_materials;
 	std::vector<std::shared_ptr<Camera>> m_cameras;
 	std::shared_ptr<RasterCamera> m_rasterCamera;

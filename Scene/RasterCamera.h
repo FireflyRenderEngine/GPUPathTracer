@@ -21,7 +21,7 @@ enum Camera_Movement
 class RasterCamera
 {
 public:
-	RasterCamera() {}
+	RasterCamera() = default;
 
 	RasterCamera(glm::vec3 cameraPosition, float screenWidth, float screenHeight, glm::vec3 worldUp = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = -90.0f, float pitch = 0.0f, float fov = 70, float cearClip = 0.1f, float farClip = 1000.0f, float sensitivity = 0.1f)
 		: m_cameraPosition(cameraPosition), m_screenWidth(screenWidth), m_screenHeight(screenHeight), m_worldUp(worldUp), m_cameraYaw(yaw), m_cameraPitch(pitch), m_fov(fov), m_nearClip(cearClip), m_farClip(farClip), m_cameraMouseSensitivity(sensitivity)

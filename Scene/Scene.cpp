@@ -14,7 +14,7 @@ Scene::Scene()
 
 Scene::Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials, std::vector<std::shared_ptr<Camera>> cameras, float screenWidth, float screenHeight)
     :m_geometries(geometries),
-    m_emmitterGeometryIndices(emitterGeometryIndices),
+    m_emitterGeometryIndices(emitterGeometryIndices),
     m_materials(materials),
     m_cameras(cameras)
 {

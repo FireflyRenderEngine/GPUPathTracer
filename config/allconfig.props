@@ -9,6 +9,9 @@
     <GLAD_VER>glad-0.1.33</GLAD_VER>
     <GLFW_VER>glfw-3.3.2</GLFW_VER>
     <KHR_VER>KHR-2018</KHR_VER>
+    <OPENEXR_VER>openexr-2.4.0</OPENEXR_VER>
+    <ZLIB_VER>zlib-1.2.11</ZLIB_VER>
+    <NLOHMANNJSON_VER>nlohmannJSON-3.7.3</NLOHMANNJSON_VER>
   </PropertyGroup>
   <PropertyGroup>
     <_PropertySheetDisplayName>AllConfig</_PropertySheetDisplayName>
@@ -55,6 +58,15 @@
     </BuildMacro>
     <BuildMacro Include="KHR_VER">
       <Value>$(KHR_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="OPENEXR_VER">
+      <Value>$(OPENEXR_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="ZLIB_VER">
+      <Value>$(ZLIB_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="NLOHMANNJSON_VER">
+      <Value>$(NLOHMANNJSON_VER)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>
