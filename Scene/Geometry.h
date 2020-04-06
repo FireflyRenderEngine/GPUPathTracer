@@ -6,7 +6,7 @@
 #include <vector>
 #include <memory>
 
-enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, PLANE};
+enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, PLANE, NONE};
 
 class Geometry
 {
@@ -40,7 +40,7 @@ public:
 		rotate *= glm::rotate(glm::mat4(1.0f), m_geometryRotationAngleAlongAxis.y, glm::vec3(0.0f, 1.0f, 0.0f));
 		rotate *= glm::rotate(glm::mat4(1.0f), m_geometryRotationAngleAlongAxis.z, glm::vec3(0.0f, 0.0f, 1.0f));
 
-		// Sacle
+		// Scale
 		glm::mat4 scale(1.0f);
 		scale *= glm::scale(glm::mat4(1.0f), m_geometryScale);
 

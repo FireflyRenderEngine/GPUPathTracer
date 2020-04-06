@@ -35,10 +35,10 @@ public:
 	// The file path by default is empty string and should not be provided for standard SPHERE, PLANE, CUBE geometry. It should only be provided for custom user triangle mesh.
 	bool LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string filePath = "");
 	
-	void SetRasterCamera(glm::vec3 cameraPosition);
+	void SetRasterCamera(glm::vec3 cameraPosition, float screenWidth, float screenHeight, glm::vec3 cameraForward, glm::vec3 worldUp, float yaw, float pitch, float fov, float nearClip, float farClip, float sensitivity);
 
 	std::vector<std::shared_ptr<Geometry>> m_geometries;
-	std::vector<int> m_emmitterGeometryIndices;
+	std::vector<int> m_emitterGeometryIndices;
 	std::vector<std::shared_ptr<Material>> m_materials;
 	std::vector<std::shared_ptr<Camera>> m_cameras;
 	std::shared_ptr<RasterCamera> m_rasterCamera;

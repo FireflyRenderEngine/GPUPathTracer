@@ -1,15 +1,13 @@
 #pragma once
-#include "vec3.hpp"
-#include "glm.hpp"
-#include <gtc/matrix_transform.hpp>
+#include "Camera.h"
 
 // Defines several possible options for camera movement. Used as abstraction to stay away from window-system specific input methods
-enum Camera_Movement 
+enum Camera_Movement
 {
-    FORWARD,
-    BACKWARD,
-    LEFT,
-    RIGHT,
+	FORWARD,
+	BACKWARD,
+	LEFT,
+	RIGHT,
 	UP,
 	DOWN,
 	YAWLEFT,
@@ -18,17 +16,20 @@ enum Camera_Movement
 	PITCHDOWN
 };
 
-class RasterCamera
+class SCENE_API RasterCamera : public Camera
 {
 public:
-	RasterCamera() {}
+	RasterCamera() = default;
 
-	RasterCamera(glm::vec3 cameraPosition, float screenWidth, float screenHeight, glm::vec3 worldUp = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = -90.0f, float pitch = 0.0f, float fov = 70, float cearClip = 0.1f, float farClip = 1000.0f, float sensitivity = 0.1f)
-		: m_cameraPosition(cameraPosition), m_screenWidth(screenWidth), m_screenHeight(screenHeight), m_worldUp(worldUp), m_cameraYaw(yaw), m_cameraPitch(pitch), m_fov(fov), m_nearClip(cearClip), m_farClip(farClip), m_cameraMouseSensitivity(sensitivity)
+	RasterCamera(glm::vec3 cameraPosition, float screenWidth, float screenHeight, glm::vec3 cameraForward = glm::vec3( 0.f, 0.f, -1.f ), glm::vec3 worldUp = glm::vec3( 0.0f, 1.0f, 0.0f ), float yaw = -90.0f, float pitch = 0.0f, float fov = 70, float nearClip = 0.1f, float farClip = 1000.0f, float sensitivity = 0.3f)
+		: Camera(cameraPosition, screenWidth, screenHeight, cameraForward, worldUp, yaw, pitch, fov, nearClip, farClip ), m_cameraMouseSensitivity(sensitivity)
 	{
-		m_cameraForward = glm::vec3(0.0f, 0.0f, -1.0f);
 		m_cameraFirstMouseInput = false;
-		UpdateBasisAxis();
+		m_cameraMovementSpeed = 1.f;
+	}
+
+	virtual ~RasterCamera() override
+	{
 	}
 
 	// Camera Movement Functions
@@ -114,56 +115,11 @@ public:
 		UpdateBasisAxis();
 	}
 
-	// Calculates the front vector from the Camera's (updated) Euler Angles
-	void UpdateBasisAxis()
-	{
-		// Calculate the new Front vector
-		glm::vec3 front;
-		front.x = cos(glm::radians(m_cameraYaw)) * cos(glm::radians(m_cameraPitch));
-		front.y = sin(glm::radians(m_cameraPitch));
-		front.z = sin(glm::radians(m_cameraYaw)) * cos(glm::radians(m_cameraPitch));
-		m_cameraForward = glm::normalize(front);
-		// Also re-calculate the Right and Up vector
-		m_cameraRight = glm::normalize(glm::cross(m_cameraForward, m_worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
-		m_cameraUp = glm::normalize(glm::cross(m_cameraRight, m_cameraForward));
-	}
-	//---------------------------------------------------------------------
-
-	// View Projection Matrix
-	glm::mat4 GetViewMatrix() 
-	{
-		return glm::lookAtRH(m_cameraPosition, m_cameraPosition + m_cameraForward, m_cameraUp);
-	}
-
-	glm::mat4 GetProjectionMatrix() 
-	{
-		return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
-	}
-
-	void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight) {
-		m_screenWidth = screenWidth;
-		m_screenHeight = screenHeight;
-	}
+	
 private:
-	glm::vec3 m_cameraPosition;
-	glm::vec3 m_cameraUp;
-	glm::vec3 m_cameraRight;
-	glm::vec3 m_cameraForward;
-    glm::vec3 m_worldUp;
-
-    float m_cameraYaw;
-    float m_cameraPitch;
-
     // Camera options
-    float m_cameraMovementSpeed;
-    float m_cameraMouseSensitivity;
-    float m_cameraZoom;
-	bool m_cameraFirstMouseInput;
-
-	float m_screenWidth;
-	float m_screenHeight;
-	float m_fov;
-	float m_nearClip;
-	float m_farClip;
-	float m_xDelta, m_yDelta;
+	float m_cameraMovementSpeed{ 0.3f };
+	float m_cameraMouseSensitivity{ 0.3f };
+	bool m_cameraFirstMouseInput{ false };
+	float m_xDelta{0.f}, m_yDelta{0.f};
 };

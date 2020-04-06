@@ -3,10 +3,7 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="AllConfig.props" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros">
-    <OPENEXR_VER>openexr-2.4.0</OPENEXR_VER>
-    <ZLIB_VER>zlib-1.2.11</ZLIB_VER>
-  </PropertyGroup>
+  <PropertyGroup Label="UserMacros" />
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
@@ -43,12 +40,5 @@ if not exist "$(SolutionDir)$(Platform)\$(Configuration)\Imath-2_4.dll" (
 )</Command>
     </PreLinkEvent>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <BuildMacro Include="OPENEXR_VER">
-      <Value>$(OPENEXR_VER)</Value>
-    </BuildMacro>
-    <BuildMacro Include="ZLIB_VER">
-      <Value>$(ZLIB_VER)</Value>
-    </BuildMacro>
-  </ItemGroup>
+  <ItemGroup />
 </Project>

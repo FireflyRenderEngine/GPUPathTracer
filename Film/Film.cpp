@@ -2,6 +2,11 @@
 #include "Film.h"
 
 
+Film::Film(std::string filename)
+	:m_width(1024), m_height(768), m_pixels(new Rgba[m_width * m_height])
+{
+}
+
 Film::Film(int width, int height)
 	: m_width(width), m_height(height)
 {

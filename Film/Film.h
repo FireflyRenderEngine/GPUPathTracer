@@ -24,6 +24,8 @@ using namespace IMATH_NAMESPACE;
 class FILM_API Film
 {
 public:
+	Film() = default;
+	Film(std::string filename);
 	Film(int width, int height);
 	~Film();
 	bool saveAsEXR(std::string filename);

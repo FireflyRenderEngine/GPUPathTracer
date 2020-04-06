@@ -14,7 +14,7 @@ Scene::Scene()
 
 Scene::Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials, std::vector<std::shared_ptr<Camera>> cameras, float screenWidth, float screenHeight)
     :m_geometries(geometries),
-    m_emmitterGeometryIndices(emitterGeometryIndices),
+    m_emitterGeometryIndices(emitterGeometryIndices),
     m_materials(materials),
     m_cameras(cameras)
 {
@@ -46,7 +46,8 @@ float Scene::GetScreenHeight()
     return m_screenHeight;
 }
 
-bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string filePath) {
+bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rotationAlongAxis, glm::vec3 scale, std::string filePath) 
+{
     // Handle predefined geometry file paths
     std::string projectPath = SOLUTION_DIR;
     switch (geometryType)
@@ -60,9 +61,16 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
         case GeometryType::PLANE:
             filePath = projectPath + R"(SceneResources\plane.obj)";
             break;
-        default:
+        case GeometryType::TRIANGLEMESH:
             // If the geometry type is not among the supported type or is a triangle mesh and the file path is empty return false
-            if (geometryType != GeometryType::TRIANGLEMESH || filePath == "") {
+            if (filePath == "")
+            {
+                return false;
+            }
+            break;
+        default:
+            if (filePath == "") 
+            {
                 return false;
             }
             break;
@@ -75,13 +83,15 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
     std::string warn;
     std::string err;
 
-    if (tinyobj::LoadObj(&geometryAttributes, &geometries, nullptr, &warn, &err, filePath.c_str()) == false) {
+    if (tinyobj::LoadObj(&geometryAttributes, &geometries, nullptr, &warn, &err, filePath.c_str()) == false) 
+    {
         return false;
     }
 
     // NOTE: We currently only support triangle geometries
     // Loop over Geometries
-    for (size_t geometryIndex = 0; geometryIndex < geometries.size(); geometryIndex++) {
+    for (size_t geometryIndex = 0; geometryIndex < geometries.size(); geometryIndex++)
+    {
 
         // Loop over triangles / Geometry
         size_t index_offset = 0;
@@ -96,7 +106,8 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
             int numberOfVerticesPerFace = geometries[geometryIndex].mesh.num_face_vertices[triangleIndex];
 
             // Loop over the triangle attributes.
-            for (size_t attributeIndex = 0; attributeIndex < numberOfVerticesPerFace; attributeIndex++) {
+            for (size_t attributeIndex = 0; attributeIndex < numberOfVerticesPerFace; attributeIndex++) 
+            {
 
                 // access to vertex
                 tinyobj::index_t idx = geometries[geometryIndex].mesh.indices[index_offset + attributeIndex];
@@ -144,6 +155,7 @@ bool Scene::LoadOBJ(GeometryType geometryType, glm::vec3 position, glm::vec3 rot
     return true;
 }
 
-void Scene::SetRasterCamera(glm::vec3 cameraPosition) {
-    m_rasterCamera = std::make_shared<RasterCamera>(cameraPosition, m_screenWidth, m_screenHeight);
+void Scene::SetRasterCamera(glm::vec3 cameraPosition, float screenWidth, float screenHeight, glm::vec3 cameraForward, glm::vec3 worldUp, float yaw, float pitch , float fov, float nearClip, float farClip, float sensitivity)
+{
+    m_rasterCamera = std::make_shared<RasterCamera>(cameraPosition, m_screenWidth, m_screenHeight, cameraForward, worldUp, yaw, pitch, fov, nearClip, farClip, sensitivity);
 }

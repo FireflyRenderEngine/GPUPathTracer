@@ -36,12 +36,12 @@ bool GLFWViewer::Init()
 		// Error here: Failed to initialize GLFW
 		return false;
 	}
-	return true;
 	glfwWindowHint(GLFW_SAMPLES, 4); // 4x antialiasing
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); // We want OpenGL 3.3
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); 
+	return true;
 }
 
 std::string GLFWViewer::help()
@@ -135,20 +135,28 @@ void GLFWViewer::ProcessKeyboardInput()
 		m_scene->m_rasterCamera->ProcessKeyboard(PITCHUP);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_DOWN) == GLFW_PRESS)
 		m_scene->m_rasterCamera->ProcessKeyboard(PITCHDOWN);
+	// update 1st render camera
+	if (!m_scene->m_cameras.empty())
+	{
+		m_scene->m_cameras[0] = m_scene->m_rasterCamera;
+	}
 }
 
 
-std::string GetShaderCode(std::string filePath) {	
+std::string GetShaderCode(std::string filePath)
+{
 	// Read the Vertex Shader code from the file
 	std::string VertexShaderCode;
 	std::ifstream VertexShaderStream(filePath, std::ios::in);
-	if (VertexShaderStream.is_open()) {
+	if (VertexShaderStream.is_open())
+	{
 		std::stringstream sstr;
 		sstr << VertexShaderStream.rdbuf();
 		VertexShaderCode = sstr.str();
 		VertexShaderStream.close();
 	}
-	else {
+	else 
+	{
 		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", filePath);
 		getchar();
 		return "";
@@ -156,7 +164,8 @@ std::string GetShaderCode(std::string filePath) {
 	return VertexShaderCode;
 }
 
-bool GLFWViewer::Create() {
+bool GLFWViewer::Create() 
+{
 	bool success = false;
 
 	// Compile shaders and creata a shader program
@@ -194,7 +203,8 @@ bool GLFWViewer::Create() {
 	// Check Fragment Shader
 	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &Result);
 	glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if (InfoLogLength > 0) {
+	if (InfoLogLength > 0)
+	{
 		std::vector<char> fragmentShaderErrorMessage(InfoLogLength + 1);
 		glGetShaderInfoLog(fragmentShader, InfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
 		return false;
@@ -206,7 +216,8 @@ bool GLFWViewer::Create() {
 	glAttachShader(m_shaderProgram, fragmentShader);
 	glLinkProgram(m_shaderProgram);
 	glGetProgramiv(m_shaderProgram, GL_LINK_STATUS, &Result);
-	if (InfoLogLength > 0) {
+	if (InfoLogLength > 0)
+	{
 		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
 		glGetShaderInfoLog(m_shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
 		return false;
@@ -290,7 +301,8 @@ void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix)
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(modelMatrix));
 }
 
-bool GLFWViewer::Draw() {
+bool GLFWViewer::Draw()
+{
 	bool success = false;
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -298,7 +310,8 @@ bool GLFWViewer::Draw() {
 	glUseProgram(m_shaderProgram);
 	UpdateProjectionMatrix();
 	UpdateViewMatrix();
-	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) {
+	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) 
+	{
 		glBindVertexArray(m_VAOS[geometryIndex]);
 		// Bind the Model Matrix corrosponding to the current Geometry
 		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
