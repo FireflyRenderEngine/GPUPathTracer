@@ -112,6 +112,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Film\Film.vcxproj">
+      <Project>{cad99464-faa8-40b0-a839-8dd7608a56cf}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\SceneLoader\SceneLoader.vcxproj">
       <Project>{2daff103-c82b-4413-8148-d3cb5d79b484}</Project>
     </ProjectReference>

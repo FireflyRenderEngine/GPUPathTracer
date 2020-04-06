@@ -101,6 +101,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Scene\Scene.vcxproj">
+      <Project>{5ef3bd78-faec-4d02-83cd-804618e88457}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Viewer\Viewer.vcxproj">
       <Project>{194a264d-a981-47e8-b816-0ee0a6ffec0a}</Project>
     </ProjectReference>

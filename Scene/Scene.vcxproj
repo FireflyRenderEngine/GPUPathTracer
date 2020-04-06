@@ -93,6 +93,7 @@
     <ClInclude Include="Material.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Sphere.h" />
+    <ClInclude Include="ThinLensCamera.h" />
     <ClInclude Include="TriangleMesh.h" />
   </ItemGroup>
   <ItemGroup>

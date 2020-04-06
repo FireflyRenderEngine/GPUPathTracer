@@ -21,9 +21,9 @@ class JSONLoader : public SceneLoader
 public:
 	virtual bool LoadSceneFromFile(std::string filename) override;
 private:
-    bool LoadGeometry(json& geometry, std::map<std::string, std::shared_ptr<Material>> mtl_map, std::vector<std::shared_ptr<Geometry>>* Geometrys);
-    bool LoadLights(json& geometry, std::map<std::string, std::shared_ptr<Material>> mtl_map, std::vector<std::shared_ptr<Geometry>>* Geometrys, std::vector<int>* lights);
-    bool LoadMaterial(json& material, std::map<std::string, std::shared_ptr<Material> >* mtl_map);
-    bool LoadCamera(json& jsonCamera, std::vector<std::shared_ptr<Camera>>* Cameras);
+    bool LoadGeometry(json& geometry);
+    bool LoadLights(json& geometry);
+    bool LoadMaterial(json& material);
+    bool LoadCamera(json& jsonCamera);
     void LoadTransform(json& transform, std::shared_ptr<Geometry>& geometry);
 };

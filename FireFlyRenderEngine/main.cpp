@@ -1,24 +1,23 @@
 #pragma once
-#include <iostream>
-#include "Scene/Scene.h"
+
+#include "JSONLoader/JSONLoader.h"
 #include "GLFWViewer/GLFWViewer.h"
-#include "vec3.hpp"
-#include <Scene/Geometry.h>
+#include "Scene/Geometry.h"
+
+#include <iostream>
 
 int main(int argc, char* argv[])
 {
-	float screenWidth = 1024;
-	float screenHeight = 768;
 
 	// sets up scene
-	std::shared_ptr<Scene> scene = std::make_shared<Scene>();
-	scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
-	scene->SetRasterCamera(glm::vec3(0.0f, 5.0f, 10.0f));
+	auto sceneLoader = std::make_unique<JSONLoader>();
+	sceneLoader->LoadSceneFromFile("../scenes/testscene.json");
+	std::shared_ptr<Scene> scene = sceneLoader->getScene();
 
 	// Calls renderer
 	// gets film
 	// outputs film
-	Viewer* viewer = new GLFWViewer(scene);
+	auto viewer = std::make_unique<GLFWViewer>(scene);
 	viewer->Init();
 	viewer->setupViewer();
 	viewer->render();

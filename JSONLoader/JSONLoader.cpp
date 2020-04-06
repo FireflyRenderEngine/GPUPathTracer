@@ -2,7 +2,7 @@
 #include "pch.h"
 #include "JSONLoader.h"
 
-#include "../Scene/Camera.h"
+#include "../Scene/ThinLensCamera.h"
 #include "../Scene/Material.h"
 #include "../Film/Film.h"
 #include "../Scene/TriangleMesh.h"
@@ -21,20 +21,20 @@ bool JSONLoader::LoadSceneFromFile(std::string filename)
 	{
 		return ret;
 	}
-	if (filePath.extension().filename() != "json")
+	if (filePath.extension().filename() != ".json")
 	{
 		return ret;
 	}
 	// read a JSON file
-	std::ifstream fileStream(filePath.filename());
+	std::ifstream fileStream(filePath);
 	json jsonDocument;
 	fileStream >> jsonDocument;
 
-	json cameraList, primitiveList, materialList, lightList;
+	json cameraList, geometryList, materialList, lightList;
 	std::map<std::string, std::shared_ptr<Material>> mtlNameToMaterial;
 	// check if object "frames" exists
 	bool framesPresent = jsonDocument.contains("frames");
-
+	m_scene = std::make_shared<Scene>();
 	if (framesPresent)
 	{
 		json frames = jsonDocument["frames"];
@@ -49,142 +49,106 @@ bool JSONLoader::LoadSceneFromFile(std::string filename)
 			{
 				return ret;
 			}
+			json sceneObj = frame["scene"];
 			//load cameras
-			if (frame.contains("cameras"))
+			if (sceneObj.contains("cameras"))
 			{
-				cameraList = frame["cameras"];
+				cameraList = sceneObj["cameras"];
 				for (auto& cameraObj : cameraList)
 				{
-					LoadCamera(cameraObj, &m_scene->m_cameras);
+					LoadCamera(cameraObj);
 				}
 			}
 			//load all materials in map with mtl name as key and Material itself as value
-			if (frame.contains("materials")) 
+			if (sceneObj.contains("materials"))
 			{
-				materialList = frame["materials"];
+				materialList = sceneObj["materials"];
 				for(auto& materialObj : materialList) 
 				{
-					LoadMaterial(materialObj, &mtlNameToMaterial);
+					LoadMaterial(materialObj);
 				}
 			}
 			//load primitives and attach materials from map
-			if (frame.contains("geometries")) 
+			if (sceneObj.contains("geometries"))
 			{
-				primitiveList = frame["geometries"];
-				for(auto& primitiveObj : primitiveList)
+				geometryList = sceneObj["geometries"];
+				for(auto& primitiveObj : geometryList)
 				{
-					LoadGeometry(primitiveObj, mtlNameToMaterial, &m_scene->m_geometries);
+					LoadGeometry(primitiveObj);
 				}
 			}
 			//load lights and attach materials from map
-			if (frame.contains("lights")) 
+			if (sceneObj.contains("lights"))
 			{
-				lightList = frame["lights"];
+				lightList = sceneObj["lights"];
 				for(auto& lightObj : lightList) 
 				{
-					LoadLights(lightObj, mtlNameToMaterial, &m_scene->m_geometries, &m_scene->m_emitterGeometryIndices);
+					LoadLights(lightObj);
 				}
 			}
 		}
 	}
-
+	
 	ret = true;
 	return ret;
 }
 
-bool JSONLoader::LoadGeometry(json& geometry, std::map<std::string, std::shared_ptr<Material>> mtl_map, std::vector<std::shared_ptr<Geometry>>* Geometrys)
+bool JSONLoader::LoadGeometry(json& geometry)
 {
 	std::shared_ptr<Geometry> shape = std::make_shared<Geometry>();
 	//First check what type of geometry we're supposed to load
 	std::string type;
-	if (geometry.contains(std::string("geometry"))) 
+	std::string objFilePath = "";
+	if (geometry.contains(std::string("type"))) 
 	{
-		type = geometry["geometry"].get<std::string>();
+		type = geometry["type"].get<std::string>();
 	}
-
-	bool isMesh = false;
-	if (type.compare(std::string("Mesh")) == 0)
+	GeometryType geomType = GeometryType::NONE;
+	if (type.compare(std::string("TriangleMesh")) == 0)
 	{
-		auto mesh = std::make_shared<TriangleMesh>();
-		isMesh = true;
-		glm::vec3 pos{}, rotationAlongAxis{}, scale{};
+		geomType = GeometryType::TRIANGLEMESH;
 		
-		if (geometry.contains(std::string("transform"))) {
-			json qTransform = geometry["transform"];
-			LoadTransform(qTransform, shape);
+		if (geometry.contains(std::string("filename")))
+		{
+			std::string projectPath = SOLUTION_DIR;
+			objFilePath = projectPath + geometry["filename"].get<std::string>();
 		}
-		
-		if (geometry.contains(std::string("filename"))) {
-			std::string objFilePath = geometry["filename"];
-			m_scene->LoadOBJ(GeometryType::TRIANGLEMESH, shape->m_geometryPosition, shape->m_geometryRotationAngleAlongAxis, shape->m_geometryScale, objFilePath);
-		}
-
-		//std::string meshName("Unnamed Mesh");
-		//if (geometry.contains(std::string("name"))) meshName = geometry["name"].get<std::string>();
-		//meshName.append(std::string("'s Triangle"));
-		//for (auto triangle : mesh->faces)
-		//{
-		//	auto primitive = std::make_shared<Primitive>(triangle);
-		//	QMap<std::string, std::shared_ptr<Material>>::iterator i;
-		//	if (geometry.contains(std::string("material"))) {
-		//		std::string material_name = geometry["material"];
-		//		for (i = mtl_map.begin(); i != mtl_map.end(); ++i) {
-		//			if (i.key() == material_name) {
-		//				primitive->material = i.value();
-		//			}
-		//		}
-		//	}
-		//	primitive->name = meshName;
-		//	(*primitives).append(primitive);
-		//}
+		//TODO: Load Materials per triangle
 	}
 	else if (type.compare(std::string("Sphere")) == 0)
 	{
-		shape = std::make_shared<Sphere>();
+		geomType = GeometryType::SPHERE;
 	}
-	else if (type.compare(std::string("SquarePlane")) == 0)
+	else if (type.compare(std::string("Plane")) == 0)
 	{
-		shape = std::make_shared<Plane>();
+		geomType = GeometryType::PLANE;
 	}
 	else if (type.compare(std::string("Cube")) == 0)
 	{
-		shape = std::make_shared<Cube>();
+		geomType = GeometryType::CUBE;
 	}
 	else
 	{
 		std::cout << "Could not parse the geometry!" << std::endl;
 		return NULL;
 	}
-
-
-
-
-	if (!isMesh)
-	{
-		// The Mesh class is handled differently
-		// All Triangles are added to the Primitives list
-		// but a single Drawable is created to render the Mesh
-		std::map<std::string, std::shared_ptr<Material>>::iterator i;
-		//if (geometry.contains(std::string("material"))) {
-		//	std::string material_name = geometry["material"];
-		//	for (i = mtl_map.begin(); i != mtl_map.end(); ++i) {
-		//		if (i.key() == material_name) {
-		//			primitive->material = i.value();
-		//		}
-		//	}
-		//}
-		//load transform to shape
-		if (geometry.contains(std::string("transform"))) {
-			json transform = geometry["transform"];
-			LoadTransform(transform, shape);
-		}
-		//if (geometry.contains(std::string("name"))) primitive->name = geometry["name"];
+	// TODO: Load Materials
+	std::map<std::string, std::shared_ptr<Material>>::iterator i;
+	
+	//load transform to shape
+	if (geometry.contains(std::string("transform"))) {
+		json transform = geometry["transform"];
+		LoadTransform(transform, shape);
 	}
+	//if (geometry.contains(std::string("name"))) primitive->name = geometry["name"];
+
+	m_scene->LoadOBJ(geomType, shape->m_geometryPosition, shape->m_geometryRotationAngleAlongAxis, shape->m_geometryScale, objFilePath);
 	return true;
 }
 
-bool JSONLoader::LoadLights(json& geometry, std::map<std::string, std::shared_ptr<Material>> mtl_map, std::vector<std::shared_ptr<Geometry>>* Geometrys, std::vector<int>* lights)
+bool JSONLoader::LoadLights(json& geometry)
 {
+	// TODO: LoadLights
 	return false;
 }
 
@@ -196,7 +160,7 @@ namespace
 	}
 }
 
-bool JSONLoader::LoadMaterial(json& material, std::map<std::string, std::shared_ptr<Material>>* mtl_map)
+bool JSONLoader::LoadMaterial(json& material)
 {
 	std::string type;
 
@@ -331,20 +295,28 @@ bool JSONLoader::LoadMaterial(json& material, std::map<std::string, std::shared_
 	return true;
 }
 
-bool JSONLoader::LoadCamera(json& jsonCamera, std::vector<std::shared_ptr<Camera>>* Cameras)
+bool JSONLoader::LoadCamera(json& jsonCamera)
 {
-	std::shared_ptr<Camera> camera = std::make_shared<Camera>();
-	//if (jsonCamera.contains(("target"))) camera->ref = ToVec3(jsonCamera["target"]);
-	//if (jsonCamera.contains(("eye"))) camera->eye = ToVec3(jsonCamera["eye"]);
-	//if (jsonCamera.contains(("worldUp"))) camera->world_up = ToVec3(jsonCamera["worldUp"]);
-	//if (jsonCamera.contains(("width"))) camera->width = jsonCamera["width"];
-	//if (jsonCamera.contains(("height"))) camera->height = jsonCamera["height"];
-	//if (jsonCamera.contains(("fov"))) camera->fovy = jsonCamera["fov"];
-	//if (jsonCamera.contains(("nearClip"))) camera->near_clip = jsonCamera["nearClip"];
-	//if (jsonCamera.contains(("farClip"))) camera->far_clip = jsonCamera["farClip"];
-	//
-	//camera->RecomputeAttributes();
-	Cameras->push_back(camera);
+	glm::vec3 cameraPosition{}, cameraForward{}, worldUp{};
+	float screenWidth{}, screenHeight{}, yaw{}, pitch{}, fov{}, nearClip{}, farClip{}, sensitivity{ 0.3f };
+
+	if (jsonCamera.contains(("position"))) cameraPosition = ToVec3(jsonCamera["position"].get<std::array<double, 3>>());
+	if (jsonCamera.contains(("cameraForward"))) cameraForward = ToVec3(jsonCamera["cameraForward"].get<std::array<double, 3>>());
+	if (jsonCamera.contains(("worldUp"))) worldUp = ToVec3(jsonCamera["worldUp"].get<std::array<double, 3>>());
+	if (jsonCamera.contains(("width"))) screenWidth = jsonCamera["width"].get<float>();
+	if (jsonCamera.contains(("height"))) screenHeight = jsonCamera["height"].get<float>();
+	if (jsonCamera.contains(("fov"))) fov = jsonCamera["fov"].get<float>();
+	if (jsonCamera.contains(("nearClip"))) nearClip = jsonCamera["nearClip"].get<float>();
+	if (jsonCamera.contains(("farClip"))) farClip = jsonCamera["farClip"].get<float>();
+	if (jsonCamera.contains(("pitch"))) pitch = jsonCamera["pitch"].get<float>();
+	if (jsonCamera.contains(("yaw"))) yaw = jsonCamera["yaw"].get<float>();
+	if (jsonCamera.contains(("sensitivity"))) sensitivity = jsonCamera["sensitivity"].get<float>();
+	m_scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
+
+	m_scene->SetRasterCamera(cameraPosition, screenWidth, screenHeight, cameraForward, worldUp, yaw, pitch, fov, nearClip, farClip, sensitivity);
+
+	std::shared_ptr<Camera> camera = std::make_shared<ThinLensCamera>(cameraPosition, screenWidth, screenHeight, cameraForward, worldUp, yaw, pitch, fov, farClip, nearClip);
+	m_scene->m_cameras.push_back(camera);
 	return true;
 }
 

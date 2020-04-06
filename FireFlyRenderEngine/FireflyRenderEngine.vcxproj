@@ -14,8 +14,14 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Film\Film.vcxproj">
+      <Project>{cad99464-faa8-40b0-a839-8dd7608a56cf}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\GLFWViewer\GLFWViewer.vcxproj">
       <Project>{0ebd1431-b250-4651-bc73-ebb8dae9dfd1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\JSONLoader\JSONLoader.vcxproj">
+      <Project>{569da229-679a-4bfe-b1c5-d905b6a48050}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Scene\Scene.vcxproj">
       <Project>{5ef3bd78-faec-4d02-83cd-804618e88457}</Project>
@@ -59,7 +65,7 @@
       <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
     </ProjectReference>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(INCLUDE_DIR)\$(NLOHMANNJSON_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
   </ItemDefinitionGroup>
@@ -69,7 +75,7 @@
       <SubSystem>Console</SubSystem>
     </Link>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);;$(INCLUDE_DIR)\$(NLOHMANNJSON_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <ProjectReference>

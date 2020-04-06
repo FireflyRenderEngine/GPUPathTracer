@@ -1,0 +1,59 @@
+{
+  "frames": [
+    {
+      "frameNumber": 0,
+      "scene": {
+        "cameras": [
+          {
+            "position": [ 0, 5, 15 ],
+            "cameraForward": [ 0, 0, -1 ],
+            "worldUp": [ 0, 1, 0 ],
+            "fov": 70,
+            "width": 1280,
+            "height": 900,
+            "nearClip": 0.1,
+            "farClip": 1000.0,
+            "pitch": 0.0,
+            "yaw": -90.0,
+            "sensitivity":  0.5
+          }
+        ],
+        "geometries": [
+          {
+            "type": "Plane",
+            "transform": {
+              "translate": [ 0, 7.5, 0 ],
+              "rotate": [ 90, 0, 0 ],
+              "scale": [ 10, 10, 1 ]
+            }
+          },
+          {
+            "type": "Cube",
+            "transform": {
+              "translate": [ 2, 0, 3 ],
+              "rotate": [ 0, 0, 0 ],
+              "scale": [ 1, 2, 1 ]
+            }
+          },
+          {
+            "type": "Sphere",
+            "transform": {
+              "translate": [ -6, -1, 0.75 ],
+              "rotate": [ 0, -17.5, 0 ],
+              "scale": [ 3, 3, 3 ]
+            }
+          },
+          {
+            "type": "TriangleMesh",
+            "filename": "SceneResources\\batman.obj",
+            "transform": {
+              "translate": [ 5.0, 1.25, 0.0 ],
+              "rotate": [ 0, 0, 0 ],
+              "scale": [ 1, 1, 1 ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 #include <vector>
 #include <memory>
 
-enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, PLANE};
+enum GeometryType {TRIANGLEMESH, SPHERE, CUBE, PLANE, NONE};
 
 class Geometry
 {
