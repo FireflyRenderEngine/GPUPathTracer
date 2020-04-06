@@ -311,10 +311,14 @@ bool JSONLoader::LoadCamera(json& jsonCamera)
 	if (jsonCamera.contains(("pitch"))) pitch = jsonCamera["pitch"].get<float>();
 	if (jsonCamera.contains(("yaw"))) yaw = jsonCamera["yaw"].get<float>();
 	if (jsonCamera.contains(("sensitivity"))) sensitivity = jsonCamera["sensitivity"].get<float>();
-	m_scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
+	
+	// only the first camera from the sceneloader should be used as the raster camera
+	if (m_scene->m_cameras.empty())
+	{
+		m_scene->SetScreenWidthAndHeight(screenWidth, screenHeight);
 
-	m_scene->SetRasterCamera(cameraPosition, screenWidth, screenHeight, cameraForward, worldUp, yaw, pitch, fov, nearClip, farClip, sensitivity);
-
+		m_scene->SetRasterCamera(cameraPosition, screenWidth, screenHeight, cameraForward, worldUp, yaw, pitch, fov, nearClip, farClip, sensitivity);
+	}
 	std::shared_ptr<Camera> camera = std::make_shared<ThinLensCamera>(cameraPosition, screenWidth, screenHeight, cameraForward, worldUp, yaw, pitch, fov, farClip, nearClip);
 	m_scene->m_cameras.push_back(camera);
 	return true;
