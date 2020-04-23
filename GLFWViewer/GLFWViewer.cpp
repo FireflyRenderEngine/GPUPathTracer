@@ -293,30 +293,82 @@ bool GLFWViewer::Create()
 		glGenBuffers(1, &VBOVertexPos);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * geometryPtr->m_vertices.size(), &(geometryPtr->m_vertices[0]), GL_STATIC_DRAW);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(0);
+		
 
 		unsigned int VBOVertexUV;
 		glGenBuffers(1, &VBOVertexUV);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * geometryPtr->m_uvs.size(), &(geometryPtr->m_uvs[0]), GL_STATIC_DRAW);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(1);
+		
 
 		unsigned int VBOVertexNormals;
 		glGenBuffers(1, &VBOVertexNormals);
 		glBindBuffer(GL_ARRAY_BUFFER, VBOVertexNormals);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * geometryPtr->m_normals.size(), &(geometryPtr->m_normals[0]), GL_STATIC_DRAW);
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(2);
+		
 
 		m_VAOS.push_back(VAO);
-		
+		m_VBOVertexPos.push_back(VBOVertexPos);
+		m_VBOVertexUV.push_back(VBOVertexUV);
+		m_VBOVertexNormals.push_back(VBOVertexNormals);
 		// Set the color for the geometry to be visualized in the OpenGL Viewer
 		m_randomColorPerGeometry.push_back(glm::vec3(dis(gen), dis(gen), dis(gen)));
 	}
 
 	// DEFERRED PART: LOADING THE DATA FOR THE RENDRER QUAD
+
+	// ---------------------------------------------
+	// Render to Texture - specific code begins here
+	// ---------------------------------------------
+
+	// The framebuffer, which regroups 0, 1, or more textures, and 0 or 1 depth buffer.
+	glGenFramebuffers(1, &m_framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+
+	// The texture we're going to render to
+	glGenTextures(1, &m_texColorBuffer);
+
+	// "Bind" the newly created texture : all future texture functions will modify this texture
+	glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+
+	// Give an empty image to OpenGL ( the last "0" means "empty" )
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+
+	// Poor filtering
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	
+	// Set "renderedTexture" as our colour attachement #0
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_texColorBuffer, 0);
+
+	// Set the list of draw buffers.
+	GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(1, DrawBuffers); // "1" is the size of DrawBuffers
+
+	// Always check that our framebuffer is ok
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		return false;
+
+
+	// The fullscreen quad's FBO
+	static const GLfloat g_quad_vertex_buffer_data[] = {
+		-1.0f, -1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f,
+	};
+
+
+	glGenBuffers(1, &quad_vertexbuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex_buffer_data), g_quad_vertex_buffer_data, GL_STATIC_DRAW);
+	
+
 	// Compile shaders for rendering the defered quad and create a shader program
 	unsigned int deferredQuadVertexShader;
 	std::string deferredQuadVertexShaderFilePath = projectPath + R"(SceneResources\DeferredQuadVertexShader.glsl)";
@@ -339,60 +391,7 @@ bool GLFWViewer::Create()
 		return false;
 	}
 	DeleteShaders(deferredQuadVertexShader, deferredQuadFragmentShader);
-
-	// Load the Vertex Position, Normal, UV's for the quad
-	glGenVertexArrays(1, &m_deferredQuadVAO);
-	glBindVertexArray(m_deferredQuadVAO);
-
-	// Set the VBO for the vertex buffer data
-	unsigned int VBOVertexPos;
-	glGenBuffers(1, &VBOVertexPos);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
-	std::vector<glm::vec3> vertexPosition = {glm::vec3(-1.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(-1.0f, 0.0f, -1.0f),
-											 glm::vec3(-1.0f, 0.0f, -1.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, -1.0f)};
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * vertexPosition.size(), &(vertexPosition[0]), GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	unsigned int VBOVertexUV;
-	glGenBuffers(1, &VBOVertexUV);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
-	std::vector<glm::vec2> vertexNormal = {glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 0.0f) , glm::vec2(0.0f, 1.0f),
-										   glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(1.0f, 1.0f)};
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * vertexNormal.size(), &(vertexNormal[0]), GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-
-	// Create framebuffer for deferred rendering. Attach texture to the framebuffer output
-	glGenFramebuffers(1, &m_framebuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-
-	// Generate texture
-	glGenTextures(1, &m_texColorBuffer);
-	glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	// Attach it to currently bound framebuffer object
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texColorBuffer, 0);
-
-	unsigned int rbo;
-	glGenRenderbuffers(1, &rbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, m_scene->GetScreenWidth(), m_scene->GetScreenHeight());
-	glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-	{
-		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-		return false;
-	}
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
+	m_deferredQuadVAO = glGetUniformLocation(m_deferredQuadShaderProgram, "screenTexture");
 	success = true;
 	return success;
 }
@@ -440,26 +439,44 @@ bool GLFWViewer::Draw()
 	// Loop over the mesh and draw them
 	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) 
 	{
-		glBindVertexArray(m_VAOS[geometryIndex]);
-		// Bind the Model Matrix corrosponding to the current Geometry
+		// Bind the Model Matrix corresponding to the current Geometry
 		std::shared_ptr<Geometry> geometryPtr = m_scene->m_geometries[geometryIndex];
 		SetGeometryModelMatrix(geometryPtr->m_modelMatrix);
 		SetGeometryColor(geometryIndex);
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, m_VBOVertexPos[geometryIndex]);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+		glBindBuffer(GL_ARRAY_BUFFER, m_VBOVertexUV[geometryIndex]);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(2);
+		glBindBuffer(GL_ARRAY_BUFFER, m_VBOVertexNormals[geometryIndex]);
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+
 		glDrawArrays(GL_TRIANGLES, 0, geometryPtr->m_triangleIndices.size());
+
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
 	} 
 
 	// Draw the rendered scene to the quad
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
-	if (glIsProgram(m_deferredQuadShaderProgram))
-	{
-		glUseProgram(m_deferredQuadShaderProgram);
-		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
-		glBindVertexArray(m_deferredQuadVAO);
-		glDisable(GL_DEPTH_TEST);
-		glDrawArrays(GL_TRIANGLES, 0, 6);
-	}
+	glClearColor(0.30f, 0.40f, 0.30f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	
+	glUseProgram(m_deferredQuadShaderProgram);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+	glUniform1i(m_deferredQuadVAO, 0);
+	
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,0,(void*)0);
+	
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glDisableVertexAttribArray(0);
 	
 	success = true;
 	return success;

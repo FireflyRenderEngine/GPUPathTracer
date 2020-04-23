@@ -11,7 +11,10 @@ int main(int argc, char* argv[])
 {
 	// sets up scene
 	auto sceneLoader = std::make_unique<JSONLoader>();
-	sceneLoader->LoadSceneFromFile("../scenes/testscene.json");
+
+	std::string projectPath = SOLUTION_DIR;
+	std::string sceneFile = projectPath + R"(scenes\testscene.json)";
+	sceneLoader->LoadSceneFromFile(sceneFile);
 	std::shared_ptr<Scene> scene = sceneLoader->getScene();
 
 	// Calls renderer

@@ -1,11 +1,11 @@
 #version 330 core
 layout (location = 0) in vec3 vertexPosition;
-layout (location = 1) in vec2 vertexUV;
+
 
 out vec2 outVectorUV;
 
 void main()
 {
-    outVectorUV = vertexUV;
+    outVectorUV = (vertexPosition.xy + vec2(1, 1)) / 2.0;
     gl_Position = vec4(vertexPosition.x, vertexPosition.y, 0.0f, 1.0); 
 }  

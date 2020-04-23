@@ -47,6 +47,9 @@ private:
 	std::unique_ptr<GLFWwindow, glfwDeleter> m_window;
 
 	std::vector<unsigned int> m_VAOS; // The set of VAO's assiciated with the vertex buffer data
+	std::vector<unsigned int> m_VBOVertexPos;
+	std::vector<unsigned int> m_VBOVertexUV;
+	std::vector<unsigned int> m_VBOVertexNormals;
 	std::vector<glm::vec3> m_randomColorPerGeometry;
 	unsigned int m_sceneShaderProgram;
 	
@@ -54,4 +57,5 @@ private:
 	unsigned int m_deferredQuadShaderProgram;
 	unsigned int m_framebuffer;
 	unsigned int m_texColorBuffer;
+	GLuint quad_vertexbuffer;
 };

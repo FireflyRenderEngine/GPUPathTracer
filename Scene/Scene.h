@@ -25,6 +25,7 @@ class SCENE_API Scene
 {
 public:
 	Scene();
+	~Scene() = default;
 	Scene(std::vector<std::shared_ptr<Geometry>> geometries, std::vector<int> emitterGeometryIndices, std::vector<std::shared_ptr<Material>> materials, std::vector<std::shared_ptr<Camera>> cameras, float screenWidth, float screenHeight);
 	void SetScreenWidthAndHeight(float screenWidth, float screenHeight);
 	void UpdateScreenWidthAndHeight(float screenWidth, float screenHeight);
