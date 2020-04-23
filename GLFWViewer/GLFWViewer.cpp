@@ -18,12 +18,12 @@
 // The following set of functions are defined as overloads as the callbacks to different events triggered by GLFW
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
-GLFWViewer::GLFWViewer() : Viewer(nullptr)
+GLFWViewer::GLFWViewer() : Viewer(nullptr, nullptr)
 {
 	m_window = nullptr;
 }
 
-GLFWViewer::GLFWViewer(std::shared_ptr<Scene> Scene) : Viewer(Scene)
+GLFWViewer::GLFWViewer(std::shared_ptr<Scene> Scene, std::shared_ptr<Film> film) : Viewer(Scene, film)
 {
 	m_window = nullptr;
 }
@@ -164,18 +164,38 @@ std::string GetShaderCode(std::string filePath)
 	return VertexShaderCode;
 }
 
-bool GLFWViewer::Create() 
+bool GLFWViewer::CompileFragmentShader(std::string fragmentShaderFilePath, unsigned int& fragmentShader) 
 {
 	bool success = false;
 
-	// Compile shaders and creata a shader program
+	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
+
+	char const* fragmentSourcePointer = fragmentShaderSource.c_str();
+	glShaderSource(fragmentShader, 1, &fragmentSourcePointer, NULL);
+	glCompileShader(fragmentShader);
+	
+	// Check Fragment Shader
 	GLint Result = GL_FALSE;
 	int InfoLogLength;
-	// Compile Vertex Shader
-	unsigned int vertexShader;
+	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength > 0)
+	{
+		std::vector<char> fragmentShaderErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(fragmentShader, InfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
+		return success;
+	}
+
+	success = true;
+	return success;
+}
+
+bool GLFWViewer::CompileVertexShader(std::string vertexShaderFilePath, unsigned int& vertexShader) 
+{
+	bool success = false;
+
 	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	std::string projectPath = SOLUTION_DIR;
-	std::string vertexShaderFilePath = projectPath + R"(SceneResources\VertexShader.glsl)";
 	std::string vertexShaderSource = GetShaderCode(vertexShaderFilePath);
 
 	char const* vertexSourcePointer = vertexShaderSource.c_str();
@@ -183,48 +203,76 @@ bool GLFWViewer::Create()
 	glCompileShader(vertexShader);
 
 	// Check Vertex Shader
+	GLint Result = GL_FALSE;
+	int InfoLogLength;
 	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &Result);
 	glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
 	if (InfoLogLength > 0) {
 		std::vector<char> vertexShaderErrorMessage(InfoLogLength + 1);
 		glGetShaderInfoLog(vertexShader, InfoLogLength, NULL, &vertexShaderErrorMessage[0]);
+		return success;
+	}
+
+	success = true;
+	return success;
+}
+
+bool GLFWViewer::CreateShaderProgram(unsigned int& shaderProgram, unsigned int& vertexShader, unsigned int& fragmentShader)
+{
+	bool success = false;
+
+	shaderProgram = glCreateProgram();
+	glAttachShader(shaderProgram, vertexShader);
+	glAttachShader(shaderProgram, fragmentShader);
+	glLinkProgram(shaderProgram);
+	GLint Result = GL_FALSE;
+	int InfoLogLength = 0;
+	glGetProgramiv(shaderProgram, GL_LINK_STATUS, &Result);
+	std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
+	glGetShaderInfoLog(shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
+	if (InfoLogLength > 0)
+	{
+		return success;
+	}
+
+	success = true;
+	return success;
+}
+
+void GLFWViewer::DeleteShaders(unsigned int& vertexShader, unsigned int& fragmentShader)
+{
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+}
+
+bool GLFWViewer::Create() 
+{
+	bool success = false;
+
+	// FORWARD PART: LOADING THE DATA FOR THE SCENE
+	// Compile shaders for rendering the scene and create a shader program
+	unsigned int vertexShader;
+	std::string projectPath = SOLUTION_DIR;
+	std::string vertexShaderFilePath = projectPath + R"(SceneResources\VertexShader.glsl)";
+	if (!CompileVertexShader(vertexShaderFilePath, vertexShader)) 
+	{
 		return false;
 	}
 
 	// Compile Fragment Shader
 	unsigned int fragmentShader;
-	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 	std::string fragmentShaderFilePath = projectPath + R"(SceneResources\FragmentShader.glsl)";
-	std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
-
-	char const* fragmentSourcePointer = fragmentShaderSource.c_str();
-	glShaderSource(fragmentShader, 1, &fragmentSourcePointer, NULL);
-	glCompileShader(fragmentShader);
-	// Check Fragment Shader
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &Result);
-	glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if (InfoLogLength > 0)
+	if (!CompileFragmentShader(fragmentShaderFilePath, fragmentShader))
 	{
-		std::vector<char> fragmentShaderErrorMessage(InfoLogLength + 1);
-		glGetShaderInfoLog(fragmentShader, InfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
 		return false;
 	}
 
 	// Create a shader program
-	m_shaderProgram = glCreateProgram();
-	glAttachShader(m_shaderProgram, vertexShader);
-	glAttachShader(m_shaderProgram, fragmentShader);
-	glLinkProgram(m_shaderProgram);
-	glGetProgramiv(m_shaderProgram, GL_LINK_STATUS, &Result);
-	if (InfoLogLength > 0)
+	if (!CreateShaderProgram(m_sceneShaderProgram, vertexShader, fragmentShader)) 
 	{
-		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
-		glGetShaderInfoLog(m_shaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
 		return false;
 	}
-
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
+	DeleteShaders(vertexShader, fragmentShader);
 
 	// Seed the random number generator for creating random colors for geometries
 	std::random_device rd;  //Will be used to obtain a seed for the random number engine
@@ -268,36 +316,110 @@ bool GLFWViewer::Create()
 		m_randomColorPerGeometry.push_back(glm::vec3(dis(gen), dis(gen), dis(gen)));
 	}
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
+	// DEFERRED PART: LOADING THE DATA FOR THE RENDRER QUAD
+	// Compile shaders for rendering the defered quad and create a shader program
+	unsigned int deferredQuadVertexShader;
+	std::string deferredQuadVertexShaderFilePath = projectPath + R"(SceneResources\DeferredQuadVertexShader.glsl)";
+	if (!CompileVertexShader(deferredQuadVertexShaderFilePath, deferredQuadVertexShader))
+	{
+		return false;
+	}
+
+	// Compile Fragment Shader
+	unsigned int deferredQuadFragmentShader;
+	std::string deferredQuadFragmentShaderFilePath = projectPath + R"(SceneResources\DeferredQuadFragmentShader.glsl)";
+	if (!CompileFragmentShader(deferredQuadFragmentShaderFilePath, deferredQuadFragmentShader))
+	{
+		return false;
+	}
+
+	// Create a shader program
+	if (!CreateShaderProgram(m_deferredQuadShaderProgram, deferredQuadVertexShader, deferredQuadFragmentShader))
+	{
+		return false;
+	}
+	DeleteShaders(deferredQuadVertexShader, deferredQuadFragmentShader);
+
+	// Load the Vertex Position, Normal, UV's for the quad
+	glGenVertexArrays(1, &m_deferredQuadVAO);
+	glBindVertexArray(m_deferredQuadVAO);
+
+	// Set the VBO for the vertex buffer data
+	unsigned int VBOVertexPos;
+	glGenBuffers(1, &VBOVertexPos);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOVertexPos);
+	std::vector<glm::vec3> vertexPosition = {glm::vec3(-1.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(-1.0f, 0.0f, -1.0f),
+											 glm::vec3(-1.0f, 0.0f, -1.0f), glm::vec3(1.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, -1.0f)};
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * vertexPosition.size(), &(vertexPosition[0]), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	unsigned int VBOVertexUV;
+	glGenBuffers(1, &VBOVertexUV);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOVertexUV);
+	std::vector<glm::vec2> vertexNormal = {glm::vec2(0.0f, 0.0f), glm::vec2(1.0f, 0.0f) , glm::vec2(0.0f, 1.0f),
+										   glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(1.0f, 1.0f)};
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * vertexNormal.size(), &(vertexNormal[0]), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(1);
+
+	// Create framebuffer for deferred rendering. Attach texture to the framebuffer output
+	glGenFramebuffers(1, &m_framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+
+	// Generate texture
+	glGenTextures(1, &m_texColorBuffer);
+	glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	// Attach it to currently bound framebuffer object
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texColorBuffer, 0);
+
+	unsigned int rbo;
+	glGenRenderbuffers(1, &rbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, m_scene->GetScreenWidth(), m_scene->GetScreenHeight());
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+		return false;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 	success = true;
 	return success;
 }
 
 void GLFWViewer::UpdateProjectionMatrix() 
 {
-	int projectionMatrixLocation = glGetUniformLocation(m_shaderProgram, "projectionMatrix");
+	int projectionMatrixLocation = glGetUniformLocation(m_sceneShaderProgram, "projectionMatrix");
 	glm::mat4 projectionMatrix = m_scene->m_rasterCamera->GetProjectionMatrix();
 	glUniformMatrix4fv(projectionMatrixLocation, 1, false, glm::value_ptr(projectionMatrix));
 }
 
 void GLFWViewer::SetGeometryColor(int geometryIndex)
 {
-	int geometryColorLocation = glGetUniformLocation(m_shaderProgram, "geometryColor");
+	int geometryColorLocation = glGetUniformLocation(m_sceneShaderProgram, "geometryColor");
 	glUniform3fv(geometryColorLocation, 1, &(m_randomColorPerGeometry[geometryIndex][0]));
 }
 
 void GLFWViewer::UpdateViewMatrix() 
 {
-	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "viewMatrix");
+	int viewMatrixLocation = glGetUniformLocation(m_sceneShaderProgram, "viewMatrix");
 	glm::mat4 viewMatrix = m_scene->m_rasterCamera->GetViewMatrix();
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(viewMatrix));
 }
 
-
 void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix) 
 {
-	int viewMatrixLocation = glGetUniformLocation(m_shaderProgram, "modelMatrix");
+	int viewMatrixLocation = glGetUniformLocation(m_sceneShaderProgram, "modelMatrix");
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(modelMatrix));
 }
 
@@ -305,11 +427,17 @@ bool GLFWViewer::Draw()
 {
 	bool success = false;
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	// Loop over the mesh 
-	glUseProgram(m_shaderProgram);
+	// Render the scene to the frame buffer attched texture
+	glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+	glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // we're not using the stencil buffer now
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glUseProgram(m_sceneShaderProgram);
+	glActiveTexture(GL_TEXTURE0);
 	UpdateProjectionMatrix();
 	UpdateViewMatrix();
+	// Loop over the mesh and draw them
 	for (int geometryIndex = 0; geometryIndex < m_VAOS.size(); geometryIndex++) 
 	{
 		glBindVertexArray(m_VAOS[geometryIndex]);
@@ -320,6 +448,19 @@ bool GLFWViewer::Draw()
 		glDrawArrays(GL_TRIANGLES, 0, geometryPtr->m_triangleIndices.size());
 	} 
 
+	// Draw the rendered scene to the quad
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	if (glIsProgram(m_deferredQuadShaderProgram))
+	{
+		glUseProgram(m_deferredQuadShaderProgram);
+		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+		glBindVertexArray(m_deferredQuadVAO);
+		glDisable(GL_DEPTH_TEST);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
+	
 	success = true;
 	return success;
 }

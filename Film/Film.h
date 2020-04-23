@@ -10,8 +10,8 @@
 #	define FILM_API
 #endif
 
-#include <OpenEXR/IlmImf/ImfRgbaFile.h>
-#include <OpenEXR/IlmImf/ImfArray.h>
+#include "OpenEXR/IlmImf/ImfRgbaFile.h"
+#include "OpenEXR/IlmImf/ImfArray.h"
 
 #include <OpenEXR/IlmImf/ImfNamespace.h>
 

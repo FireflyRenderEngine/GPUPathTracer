@@ -79,11 +79,18 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(OPENEXR_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <Lib>
+      <AdditionalDependencies>zlib.lib;Imath-2_4.lib;IlmThread-2_4.lib;IlmImfUtil-2_4.lib;IlmImf-2_4.lib;IexMath-2_4.lib;Iex-2_4.lib;Half-2_4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
+    <Lib>
+      <AdditionalLibraryDirectories>$(LIB_DIR)\$(ZLIB_VER);$(LIB_DIR)\$(OPENEXR_VER);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />

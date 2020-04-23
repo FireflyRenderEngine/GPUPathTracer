@@ -1,10 +1,9 @@
 #version 330 core
-in vec2 outVertexUV;
-in vec3 outVertexNormals;
-
-uniform vec3 geometryColor; 
-
 out vec4 FragColor;
+in vec2 interpolatedVertexUV;
+in vec3 interpolatedVertexNormals;
+
+uniform vec3 geometryColor;
 
 void main()
 {
