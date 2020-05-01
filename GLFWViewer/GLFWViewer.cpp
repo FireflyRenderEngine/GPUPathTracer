@@ -135,6 +135,10 @@ void GLFWViewer::ProcessKeyboardInput()
 		m_scene->m_rasterCamera->ProcessKeyboard(PITCHUP);
 	if (glfwGetKey(m_window.get(), GLFW_KEY_DOWN) == GLFW_PRESS)
 		m_scene->m_rasterCamera->ProcessKeyboard(PITCHDOWN);
+	if ((glfwGetKey(m_window.get(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(m_window.get(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(m_window.get(), GLFW_KEY_S) == GLFW_PRESS)
+	{
+		m_film->saveAsEXR();
+	}
 	// update 1st render camera
 	if (!m_scene->m_cameras.empty())
 	{
@@ -332,7 +336,7 @@ bool GLFWViewer::Create()
 	glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
 
 	// Give an empty image to OpenGL ( the last "0" means "empty" )
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
 	// Poor filtering
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -352,7 +356,6 @@ bool GLFWViewer::Create()
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		return false;
 
-
 	// The fullscreen quad's FBO
 	static const GLfloat g_quad_vertex_buffer_data[] = {
 		-1.0f, -1.0f, 0.0f,
@@ -363,11 +366,9 @@ bool GLFWViewer::Create()
 		 1.0f,  1.0f, 0.0f,
 	};
 
-
 	glGenBuffers(1, &quad_vertexbuffer);
 	glBindBuffer(GL_ARRAY_BUFFER, quad_vertexbuffer);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex_buffer_data), g_quad_vertex_buffer_data, GL_STATIC_DRAW);
-	
 
 	// Compile shaders for rendering the defered quad and create a shader program
 	unsigned int deferredQuadVertexShader;
@@ -392,6 +393,7 @@ bool GLFWViewer::Create()
 	}
 	DeleteShaders(deferredQuadVertexShader, deferredQuadFragmentShader);
 	m_deferredQuadVAO = glGetUniformLocation(m_deferredQuadShaderProgram, "screenTexture");
+
 	success = true;
 	return success;
 }
@@ -420,6 +422,12 @@ void GLFWViewer::SetGeometryModelMatrix(glm::mat4 modelMatrix)
 {
 	int viewMatrixLocation = glGetUniformLocation(m_sceneShaderProgram, "modelMatrix");
 	glUniformMatrix4fv(viewMatrixLocation, 1, false, glm::value_ptr(modelMatrix));
+}
+
+void GLFWViewer::UpdateQuadTexture() {
+	if (m_film->GetImageRenderedStatus()) {
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, m_scene->GetScreenWidth(), m_scene->GetScreenHeight(), 0, GL_RGBA, GL_SHORT,m_film->GetFilm());
+	}
 }
 
 bool GLFWViewer::Draw()
@@ -453,7 +461,6 @@ bool GLFWViewer::Draw()
 		glBindBuffer(GL_ARRAY_BUFFER, m_VBOVertexNormals[geometryIndex]);
 		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
-
 		glDrawArrays(GL_TRIANGLES, 0, geometryPtr->m_triangleIndices.size());
 
 		glDisableVertexAttribArray(0);
@@ -463,12 +470,13 @@ bool GLFWViewer::Draw()
 
 	// Draw the rendered scene to the quad
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
-	glClearColor(0.30f, 0.40f, 0.30f, 1.0f);
+	glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	
 	glUseProgram(m_deferredQuadShaderProgram);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+	UpdateQuadTexture();
 	glUniform1i(m_deferredQuadVAO, 0);
 	
 	glEnableVertexAttribArray(0);

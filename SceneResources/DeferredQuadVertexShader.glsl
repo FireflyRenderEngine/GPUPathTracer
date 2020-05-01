@@ -1,7 +1,6 @@
 #version 330 core
 layout (location = 0) in vec3 vertexPosition;
 
-
 out vec2 outVectorUV;
 
 void main()

@@ -39,6 +39,9 @@ public:
 	// This function is used to check & deal with any key press events
 	void ProcessKeyboardInput();
 
+	// This function checks if the film is updated and updates the texture used to render to quad
+	void UpdateQuadTexture();
+
 	virtual ~GLFWViewer() override 
 	{
 		glfwTerminate();

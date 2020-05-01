@@ -76,7 +76,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_LIB;OPENEXR_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(OPENEXR_VER);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -107,6 +107,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Film\Film.vcxproj">
+      <Project>{cad99464-faa8-40b0-a839-8dd7608a56cf}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Scene\Scene.vcxproj">
       <Project>{5ef3bd78-faec-4d02-83cd-804618e88457}</Project>
     </ProjectReference>
