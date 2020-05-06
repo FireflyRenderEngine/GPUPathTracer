@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "../Scene.h"
-#include "../../GLFWViewer/GLFWViewer.h"
 #include "../glm-0.9.9.7/vec3.hpp"
 #include "../Geometry.h"
 

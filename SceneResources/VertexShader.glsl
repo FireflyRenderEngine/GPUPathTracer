@@ -7,9 +7,10 @@ uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
 uniform mat4 modelMatrix;
 
-out vec2 outVertexUV;
-out vec3 outVertexNormals;
+out vec2 interpolatedVertexUV;
+out vec3 interpolatedVertexNormals;
 void main()
 {
+	interpolatedVertexUV = vertexUV;
     gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(vertexPosition.x, vertexPosition.y, vertexPosition.z, 1.0);
 }

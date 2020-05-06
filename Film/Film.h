@@ -10,8 +10,8 @@
 #	define FILM_API
 #endif
 
-#include <OpenEXR/IlmImf/ImfRgbaFile.h>
-#include <OpenEXR/IlmImf/ImfArray.h>
+#include "OpenEXR/IlmImf/ImfRgbaFile.h"
+#include "OpenEXR/IlmImf/ImfArray.h"
 
 #include <OpenEXR/IlmImf/ImfNamespace.h>
 
@@ -28,9 +28,14 @@ public:
 	Film(std::string filename);
 	Film(int width, int height);
 	~Film();
-	bool saveAsEXR(std::string filename);
+	bool saveAsEXR(std::string filename = "");
+	void SetImageRenderedStatus(bool status);
+	bool GetImageRenderedStatus();
+	void SetFilm(Rgba* pixels);
+	Rgba* GetFilm();
 private:
 	Rgba* m_pixels;
 	int m_width;
 	int m_height;
+	bool m_imageRenderedStatus;
 };

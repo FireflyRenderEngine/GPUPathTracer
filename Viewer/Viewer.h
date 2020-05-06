@@ -1,14 +1,15 @@
 #pragma once
 
 #include <string>
+#include "../Film/Film.h"
 #include "../Scene/Scene.h"
 
 class Viewer
 {
 public:
 	Viewer() = default;
-	Viewer(std::shared_ptr<Scene> scene)
-		:m_scene(scene)
+	Viewer(std::shared_ptr<Scene> scene, std::shared_ptr<Film> film)
+		:m_scene(scene), m_film(film)
 	{
 	}
 	virtual ~Viewer() = default;
@@ -22,4 +23,5 @@ public:
 protected:
 	std::string m_title{ "Firefly Engine" };
 	std::shared_ptr<Scene> m_scene;
+	std::shared_ptr<Film> m_film;
 };
