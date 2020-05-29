@@ -6,6 +6,8 @@
 #include "vec3.hpp"
 #include "glm.hpp"
 #include <gtc/matrix_transform.hpp>
+#include <iostream>
+#include <fstream>
 
 struct Triangle
 {
@@ -84,6 +86,22 @@ struct Camera
 		m_up = glm::normalize(glm::cross(m_right, m_forward));
 	}
 };
+
+void saveToPPM(Ray* rays, int height, int width)
+{
+	std::ofstream renderFile;
+	renderFile.open("render.ppm");
+
+	renderFile << "P3" << std::endl;
+	renderFile << width << " " << height << std::endl;
+	renderFile << 255 << std::endl;
+
+	for (int i = 0; i < width * height; ++i)
+	{
+		renderFile << static_cast<int>(rays[i].m_t * 255) << " " << static_cast<int>(rays[i].m_t * 255) << " " << static_cast<int>(rays[i].m_t * 255) << std::endl;
+	}
+	renderFile.close();
+}
 
 __global__ void generateRays(Ray* rays, Camera* camera)
 {
@@ -165,32 +183,13 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Triangle* triangle)
 	intersectTriangle(*triangle, rays[pixelIndex]);
 }
 
-#include <iostream>
-#include <fstream>
-
-void saveToPPM(Ray* rays, int height, int width)
-{
-	std::ofstream renderFile;
-	renderFile.open("render.ppm");
-
-	renderFile << "P3" << std::endl;
-	renderFile << width << " " << height << std::endl;
-	renderFile << 255 << std::endl;
-
-	for (int i = 0; i < width*height; ++i)
-	{
-		renderFile << static_cast<int>(rays->m_t * 255) << " " << static_cast<int>(rays->m_t * 255) << " " << static_cast<int>(rays->m_t * 255) << std::endl;
-	}
-	renderFile.close();
-}
-
 int main()
 {
 	Triangle* t1 = new Triangle
 	(
 		glm::vec3(0.0f, 0.0f, 0.0f),
-		glm::vec3(10.f, 10.f, 0.0f),
-		glm::vec3(20.f, 0.0f, 0.0f)
+		glm::vec3(1.f, 1.f, 0.0f),
+		glm::vec3(2.f, 0.0f, 0.0f)
 	);
 
 	int dataSize = 400 * 400;
