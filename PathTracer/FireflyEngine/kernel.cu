@@ -1,107 +1,7 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include "vector_types.h"
-#include <stdio.h>
-#include "vec3.hpp"
-#include "glm.hpp"
-#include <gtc/matrix_transform.hpp>
-#include <iostream>
-#include <fstream>
-
-struct Triangle
-{
-	Triangle() = default;
-	Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2)
-		:m_v0(v0), m_v1(v1), m_v2(v2)
-	{
-	}
-	glm::vec3 m_v0;
-	glm::vec3 m_v1;
-	glm::vec3 m_v2;
-};
-
-struct Ray
-{
-	glm::vec3 m_origin;
-	glm::vec3 m_direction;
-	float m_t{ 0.f };
-};
-
-struct Camera
-{
-	glm::vec3 m_position;
-	glm::vec3 m_up;
-	glm::vec3 m_right;
-	glm::vec3 m_forward;
-
-	glm::vec3 m_worldUp;
-
-	float m_yaw;
-	float m_pitch;
-
-	float m_screenWidth;
-	float m_screenHeight;
-	float m_fov;
-	float m_nearClip;
-	float m_farClip;
-
-	void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight)
-	{
-		m_screenWidth = screenWidth;
-		m_screenHeight = screenHeight;
-	}
-
-	__device__ glm::mat4 GetViewMatrix()
-	{
-		return glm::lookAtRH(m_position, m_position + m_forward, m_up);
-	}
-
-	__device__ glm::mat4 GetInverseViewMatrix()
-	{
-		return glm::inverse(GetViewMatrix());
-	}
-
-	__device__ glm::mat4 GetProjectionMatrix()
-	{
-		return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
-	}
-
-	__device__ glm::mat4 GetInverseProjectionMatrix()
-	{
-		return glm::inverse(GetProjectionMatrix());
-	}
-
-	// Calculates the front vector from the Camera's (updated) Euler Angles
-	void UpdateBasisAxis()
-	{
-		// Calculate the new Front vector
-		glm::vec3 front;
-		front.x = cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
-		front.y = sin(glm::radians(m_pitch));
-		front.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
-		m_forward = glm::normalize(front);
-		// Also re-calculate the Right and Up vector
-		m_right = glm::normalize(glm::cross(m_forward, m_worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
-		m_up = glm::normalize(glm::cross(m_right, m_forward));
-	}
-};
-
-void saveToPPM(Ray* rays, int height, int width)
-{
-	std::ofstream renderFile;
-	renderFile.open("render.ppm");
-
-	renderFile << "P3" << std::endl;
-	renderFile << width << " " << height << std::endl;
-	renderFile << 255 << std::endl;
-
-	for (int i = 0; i < width * height; ++i)
-	{
-		renderFile << static_cast<int>(rays[i].m_t * 255) << " " << static_cast<int>(rays[i].m_t * 255) << " " << static_cast<int>(rays[i].m_t * 255) << std::endl;
-	}
-	renderFile.close();
-}
+#include "utilities.h"
 
 __global__ void generateRays(Ray* rays, Camera* camera)
 {
@@ -125,7 +25,7 @@ __global__ void generateRays(Ray* rays, Camera* camera)
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 }
 
-__device__ bool intersectTriangle(const Triangle& triangle, Ray& ray)
+__device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Intersect& intersect)
 {
 	const float EPSILON = 0.0000001;
 	glm::vec3 vertex0 = triangle.m_v0;
@@ -157,9 +57,8 @@ __device__ bool intersectTriangle(const Triangle& triangle, Ray& ray)
 	float t = f * glm::dot(edge2, q);
 	if (t > EPSILON) // ray intersection
 	{
-		glm::vec3 intersectionPoint = ray.m_origin + ray.m_direction * t;
-		ray.m_t = t;
-		
+		intersect.m_intersectionPoint = ray.m_origin + ray.m_direction * t;
+		intersect.m_t = t;
 		return true;
 	}
 	else // This means that there is a line intersection but not a ray intersection.
@@ -168,7 +67,7 @@ __device__ bool intersectTriangle(const Triangle& triangle, Ray& ray)
 	}
 }
 
-__global__ void intersectRays(Camera* camera, Ray* rays, Triangle* triangle)
+__global__ void intersectRays(Camera* camera, Ray* rays, Triangle* triangles, glm::vec3* pixels)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -180,58 +79,106 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Triangle* triangle)
 		return;
 	}
 
-	intersectTriangle(*triangle, rays[pixelIndex]);
+	Intersect intersect;
+
+	for (int i = 0; i < 10; ++i) 
+	{
+		if (intersectTriangle(triangles[i], rays[pixelIndex], intersect)) 
+		{
+			pixels[pixelIndex] = glm::vec3(255, 0.0f, 0.0f);
+			continue;
+		}
+	}
 }
 
 int main()
 {
-	Triangle* t1 = new Triangle
-	(
-		glm::vec3(0.0f, 0.0f, 0.0f),
-		glm::vec3(1.f, 1.f, 0.0f),
-		glm::vec3(2.f, 0.0f, 0.0f)
-	);
+	// Load a triangle mesh
+	std::vector<Triangle*> trianglesInMesh;
+	for (int i = 0 ; i < 10; ++i)
+	{
+		Triangle* triangle = new Triangle(
+			glm::vec3(i, i, i),
+			glm::vec3(i + 1.f, i + 1.f, 0.0f),
+			glm::vec3(i + 2.f, 0.0f, 0.0f), 
+			glm::vec2(0.0f), glm::vec2(0.0f), glm::vec2(0.0f),
+			glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(0.0f));
+		trianglesInMesh.push_back(triangle);
+	}
+	Mesh* triangleMesh = new Mesh(2, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f), trianglesInMesh);
 
-	int dataSize = 400 * 400;
+	int windowWidth = 800;
+	int windowHeight = 800;
+	int dataSize = windowWidth * windowHeight;
 
 	Triangle* d_triangle = nullptr;
-	cudaMalloc((void**)&d_triangle, sizeof(Triangle));
+	cudaMalloc((void**)&d_triangle, sizeof(Triangle) * triangleMesh->m_numberOfTriangles);
 
 	Ray* d_rays = nullptr;
 	cudaMalloc((void**)&d_rays, dataSize * sizeof(Ray));
 
-	dim3 blockSize(8, 8, 1);
+	glm::vec3* pixels = new glm::vec3[dataSize];
+	// Initialize all the pixels with a base color of white
+	for (int i = 0 ; i < dataSize; ++i) 
+	{
+		pixels[i] = glm::vec3(255.f, 255.f, 255.f);
+	}
+	glm::vec3* d_pixels = nullptr;
+	cudaMalloc((void**)&d_pixels, dataSize * sizeof(glm::vec3));
+	cudaMemcpy(d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+
+	dim3 blockSize(16, 16, 1);
 	dim3 gridSize;
-	gridSize.x = (400 / blockSize.x) + 1;
-	gridSize.y = (400 / blockSize.y) + 1;
+	gridSize.x = (windowWidth / blockSize.x);// +1;
+	gridSize.y = (windowHeight / blockSize.y);// +1;
 
 	Camera* camera = new Camera();
 	camera->m_position = glm::vec3(0.f, 5.f, 15.f);
 	camera->m_forward = glm::vec3(0.f, 0.f, -1.f);
 	camera->m_worldUp = glm::vec3(0.f, 1.f, 0.f);
 	camera->m_fov = 70.f;
-	camera->m_screenHeight = 400.f;
-	camera->m_screenWidth = 400.f;
+	camera->m_screenHeight = float(windowWidth);
+	camera->m_screenWidth = float(windowHeight);
 	camera->m_nearClip = 0.1f;
 	camera->m_farClip = 1000.f;
 	camera->m_pitch = 0.f;
 	camera->m_yaw = -90.f;
 	camera->UpdateBasisAxis();
 
+	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
+	viewer->Create();
+
 	Camera* d_camera = nullptr;
 	cudaMalloc((void**)&d_camera, sizeof(Camera));
 
-	cudaMemcpy(d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_triangle, triangleMesh->m_triangles, sizeof(Triangle) * triangleMesh->m_numberOfTriangles, cudaMemcpyHostToDevice);
 
-	generateRays << <gridSize, blockSize >> > (d_rays, d_camera);
+	while (!glfwWindowShouldClose(viewer->m_window))
+	{
+		processInput(viewer->m_window, camera, pixels);
+		cudaMemcpy(d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
+		generateRays << <gridSize, blockSize >> > (d_rays, d_camera);
+		// Initialize all the pixels with a base color of white
+		for (int i = 0; i < dataSize; ++i)
+		{
+			pixels[i] = glm::vec3(255.f, 255.f, 255.f);
+		}
+		cudaMemcpy(d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+		intersectRays << <gridSize, blockSize >> > (d_camera, d_rays, d_triangle, d_pixels);
+		cudaMemcpy(pixels, d_pixels, sizeof(glm::vec3) * dataSize, cudaMemcpyDeviceToHost);
 
-	cudaMemcpy(d_triangle, t1, sizeof(Triangle), cudaMemcpyHostToDevice);
-	intersectRays << <gridSize, blockSize >> > (d_camera, d_rays, d_triangle);
+		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		viewer->Draw();
+
+		glfwSwapBuffers(viewer->m_window);
+		glfwPollEvents();
+	}
 	
-	Ray* rays = new Ray[dataSize];
-	cudaMemcpy(rays, d_rays, dataSize * sizeof(Ray), cudaMemcpyDeviceToHost);
+	//Ray* rays = new Ray[dataSize];
+	//cudaMemcpy(rays, d_rays, dataSize * sizeof(Ray), cudaMemcpyDeviceToHost);
 
-	saveToPPM(rays, camera->m_screenHeight, camera->m_screenWidth);
-
+	delete pixels;
 	return 0;
 }

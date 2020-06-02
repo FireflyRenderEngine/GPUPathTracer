@@ -1,0 +1,568 @@
+#include <iostream>
+#include <fstream>
+#include "vector_types.h"
+#include <vector>
+#include <stdio.h>
+#include <sstream>
+
+#include "vec3.hpp"
+#include "glm.hpp"
+#include "gtc/matrix_transform.hpp"
+#include "glad.h"
+#include "glfw/glfw3.h"
+
+// ------------------DATA CONTAINER STRUCTS------------------
+struct Geometry
+{
+	Geometry() = default;
+	Geometry(int geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale)
+		: m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
+	{
+		// Translate Matrix
+		glm::mat4 translateM = glm::translate(glm::mat4(1.0f), m_position);
+		// Rotate Matrix
+		glm::mat4 rotateM = glm::rotate(glm::mat4(1.0f), m_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+		rotateM *= glm::rotate(glm::mat4(1.0f), m_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+		rotateM *= glm::rotate(glm::mat4(1.0f), m_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+		// Scale Matrix
+		glm::mat4 scaleM = glm::scale(glm::mat4(1.0f), m_scale);
+		m_modelMatrix = translateM * rotateM * scaleM;
+	}
+
+	// Types:
+	// 1 - Plane
+	// 2 - Triangle Mesh
+	int m_geometryType;
+	glm::vec3 m_position;
+	glm::vec3 m_rotation;
+	glm::vec3 m_scale;
+	glm::mat4 m_modelMatrix;
+};
+
+struct Scene
+{
+	Scene() = default;
+	Scene(std::vector<Geometry*> geometries)
+	{
+		m_geometrySize = geometries.size();
+		m_geometries = new Geometry[m_geometrySize];
+		for (int i = 0; i < m_geometrySize; ++i) 
+		{
+			m_geometries[i] = *(geometries[i]);
+		}
+	}
+
+	~Scene() 
+	{
+		delete m_geometries;
+	}
+	Geometry* m_geometries;
+	int m_geometrySize;
+};
+
+struct Triangle
+{
+	Triangle() = default;
+	Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
+		glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2, 
+		glm::vec3 n0, glm::vec3 n1, glm::vec3 n2)
+		:m_v0(v0), m_v1(v1), m_v2(v2),
+		m_uv0(uv0), m_uv1(uv1), m_uv2(uv2),
+		m_n0(n0), m_n1(n1), m_n2(n2)
+	{
+	}
+	// Vertices
+	glm::vec3 m_v0;
+	glm::vec3 m_v1;
+	glm::vec3 m_v2;
+	// UV's
+	glm::vec2 m_uv0;
+	glm::vec2 m_uv1;
+	glm::vec2 m_uv2;
+	// Normals
+	glm::vec3 m_n0;
+	glm::vec3 m_n1;
+	glm::vec3 m_n2;
+};
+
+struct Plane : Geometry
+{
+	Plane() = default;
+	Plane(int type, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, glm::vec3 normal)
+		: Geometry(type, position, rotation, scale), m_normal(normal)
+	{
+	}
+	glm::vec3 m_normal;
+};
+
+struct Mesh : Geometry
+{
+	Mesh() = default;
+	Mesh(int type, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle*> triangles)
+		: Geometry(type, position, rotation, scale)
+	{
+		m_numberOfTriangles = triangles.size();
+		m_triangles = new Triangle[m_numberOfTriangles];
+		for (int i = 0; i < m_numberOfTriangles; ++i)
+		{
+			m_triangles[i] = *(triangles[i]);
+		}
+	}
+
+	~Mesh() 
+	{
+		delete m_triangles;
+	}
+	Triangle* m_triangles;
+	int m_numberOfTriangles;
+};
+
+struct Intersect 
+{
+	Intersect() = default;
+	glm::vec3 m_intersectionPoint;
+	float m_t{ 0.f };
+};
+
+struct Ray
+{
+	glm::vec3 m_origin;
+	glm::vec3 m_direction;
+	// TODO: Padding
+};
+
+struct Camera
+{
+	glm::vec3 m_position;
+	glm::vec3 m_up;
+	glm::vec3 m_right;
+	glm::vec3 m_forward;
+
+	glm::vec3 m_worldUp;
+
+	float m_yaw;
+	float m_pitch;
+
+	float m_screenWidth;
+	float m_screenHeight;
+	float m_fov;
+	float m_nearClip;
+	float m_farClip;
+	// Camera options
+	float m_cameraMovementSpeed = 0.3f;
+	float m_cameraMouseSensitivity = 0.3f;
+	bool m_cameraFirstMouseInput = false;
+	float m_xDelta = 0.f;
+	float m_yDelta = 0.f;
+
+	void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight)
+	{
+		m_screenWidth = screenWidth;
+		m_screenHeight = screenHeight;
+	}
+
+	__device__ glm::mat4 GetViewMatrix()
+	{
+		return glm::lookAtRH(m_position, m_position + m_forward, m_up);
+	}
+
+	__device__ glm::mat4 GetInverseViewMatrix()
+	{
+		return glm::inverse(GetViewMatrix());
+	}
+
+	__device__ glm::mat4 GetProjectionMatrix()
+	{
+		return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
+	}
+
+	__device__ glm::mat4 GetInverseProjectionMatrix()
+	{
+		return glm::inverse(GetProjectionMatrix());
+	}
+
+	// Camera Movement Functions
+	void SetClickPosition(float xPos, float yPos)
+	{
+		m_xDelta = xPos;
+		m_yDelta = yPos;
+	}
+
+	void SetClickPositionDeta(float xPos, float yPos)
+	{
+		m_xDelta -= xPos;
+		m_yDelta -= yPos;
+	}
+
+	void SetFirstMouseInputState(bool state)
+	{
+		m_cameraFirstMouseInput = state;
+	}
+
+	bool GetFirstMouseInputState()
+	{
+		return m_cameraFirstMouseInput;
+	}
+
+	// Processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
+	void ProcessKeyboard(int direction)
+	{
+		float velocity = m_cameraMouseSensitivity;
+		if (direction == 0) // FORWARD
+			m_position += m_forward * velocity;
+		if (direction == 1) // BACKWARD
+			m_position -= m_forward * velocity;
+		if (direction == 2) // LEFT
+			m_position -= m_right * velocity;
+		if (direction == 3) // RIGHT
+			m_position += m_right * velocity;
+		if (direction == 4) // UP
+			m_position += m_up * velocity;
+		if (direction == 5) // DOWN
+			m_position -= m_up * velocity;
+		if (direction == 6) // YAWLEFT
+		{
+			m_yaw -= 1.0f;
+			UpdateBasisAxis();
+		}
+		if (direction == 7) // YAWRIGHT
+		{
+			m_yaw += 1.0f;
+			UpdateBasisAxis();
+		}
+		if (direction == 8) // PITCHUP
+		{
+			m_pitch += 1.0f;
+			UpdateBasisAxis();
+		}
+		if (direction == 9) // PITCHDOWN
+		{
+			m_pitch -= 1.0f;
+			UpdateBasisAxis();
+		}
+	}
+
+	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
+	void ProcessMouseMovement(bool constrainPitch = true)
+	{
+		m_xDelta *= m_cameraMouseSensitivity;
+		m_yDelta *= m_cameraMouseSensitivity;
+
+		m_yaw += m_xDelta;
+		m_pitch += m_yDelta;
+
+		// Make sure that when pitch is out of bounds, screen doesn't get flipped
+		if (constrainPitch)
+		{
+			if (m_pitch > 89.0f)
+				m_pitch = 89.0f;
+			if (m_pitch < -89.0f)
+				m_pitch = -89.0f;
+		}
+
+		// Update Front, Right and Up Vectors using the updated Euler angles
+		UpdateBasisAxis();
+	}
+
+	// Calculates the front vector from the Camera's (updated) Euler Angles
+	void UpdateBasisAxis()
+	{
+		// Calculate the new Front vector
+		glm::vec3 front;
+		front.x = cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+		front.y = sin(glm::radians(m_pitch));
+		front.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+		m_forward = glm::normalize(front);
+		// Also re-calculate the Right and Up vector
+		m_right = glm::normalize(glm::cross(m_forward, m_worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+		m_up = glm::normalize(glm::cross(m_right, m_forward));
+	}
+};
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+struct GLFWViewer {
+	GLFWViewer(int windowWidth, int windowHeight, glm::vec3* pixels)
+		: m_windowWidth(windowWidth), m_windowHeight(windowHeight), m_pixels(pixels)
+	{
+		// Init the viewer
+		glfwInit();
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+		m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Viewer", NULL, NULL);
+		if (m_window == NULL)
+		{
+			std::cout << "Failed to create GLFW window" << std::endl;
+			glfwTerminate();
+			return;
+		}
+		glfwMakeContextCurrent(m_window);
+
+		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+		{
+			std::cout << "Failed to initialize GLAD" << std::endl;
+			return;
+		}
+
+		glViewport(0, 0, m_windowWidth, m_windowHeight);
+		glfwSetFramebufferSizeCallback(m_window, framebuffer_size_callback);
+	}
+
+	void Create() 
+	{
+		// We will initialize the quad data for rasterization now
+		static const GLfloat quadVertexData[] =
+		{
+			-1.0f, -1.0f, 0.0f,
+			 1.0f, -1.0f, 0.0f,
+			-1.0f,  1.0f, 0.0f,
+			-1.0f,  1.0f, 0.0f,
+			 1.0f, -1.0f, 0.0f,
+			 1.0f,  1.0f, 0.0f,
+		};
+
+		// Now we will initialze the OpenGL stuff for rendering a quad and the painting it with the texture
+		glGenVertexArrays(1, &m_VAO);
+		// 1. bind Vertex Array Object
+		glBindVertexArray(m_VAO);
+		// 2. copy our vertices array in a buffer for OpenGL to use
+		unsigned int VBO;
+		glGenBuffers(1, &VBO);
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertexData), quadVertexData, GL_STATIC_DRAW);
+		// 3. then set our vertex attributes pointers
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+
+		// Set the texture to be used to paint on the quad
+		glGenTextures(1, &m_texColorBuffer);
+		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+
+		// set basic parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+		// Create texture data (4-component unsigned byte)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, NULL);
+
+		// Compile the vertex and fragmnet shader and create a shader program
+		std::string programPath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
+		std::string vertexShaderPath = programPath + R"(QuadVertexShader.glsl)";
+		std::string fragmentShaderPath = programPath + R"(QuadFragmentShader.glsl)";
+		unsigned int fragmentShader;
+		unsigned int vertexShader;
+
+		if (!CompileVertexShader(vertexShaderPath, vertexShader))
+		{
+			std::cout << "Error: compiling vertex shader at path : " << vertexShaderPath <<  std::endl;
+			return;
+		}
+		
+		if (!CompileFragmentShader(fragmentShaderPath, fragmentShader))
+		{
+			std::cout << "Error: loading fragmnet shader at path : " << fragmentShaderPath << std::endl;
+			return;
+		}
+
+		if (!CreateShaderProgram(vertexShader, fragmentShader))
+		{
+			std::cout << "Error: creating shader program";
+			return;
+		}
+
+		DeleteShaders(vertexShader, fragmentShader);
+
+		// Bind the shader program
+		glUseProgram(m_quadShaderProgram);
+		glBindVertexArray(m_VAO);
+		// Bind the texture
+		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+	}
+
+	std::string GetShaderCode(std::string filePath)
+	{
+		// Read the Vertex Shader code from the file
+		std::string VertexShaderCode;
+		std::ifstream VertexShaderStream(filePath, std::ios::in);
+		if (VertexShaderStream.is_open())
+		{
+			std::stringstream sstr;
+			sstr << VertexShaderStream.rdbuf();
+			VertexShaderCode = sstr.str();
+			VertexShaderStream.close();
+		}
+		else
+		{
+			printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", filePath.c_str());
+			getchar();
+			return "";
+		}
+		return VertexShaderCode;
+	}
+
+	bool CompileFragmentShader(std::string fragmentShaderFilePath, unsigned int& fragmentShader)
+	{
+		bool success = false;
+
+		fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+		std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
+
+		char const* fragmentSourcePointer = fragmentShaderSource.c_str();
+		glShaderSource(fragmentShader, 1, &fragmentSourcePointer, NULL);
+		glCompileShader(fragmentShader);
+
+		// Check Fragment Shader
+		GLint Result = GL_FALSE;
+		int InfoLogLength;
+		glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &Result);
+		glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
+		if (InfoLogLength > 0)
+		{
+			std::vector<char> fragmentShaderErrorMessage(InfoLogLength + 1);
+			glGetShaderInfoLog(fragmentShader, InfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
+			return success;
+		}
+
+		success = true;
+		return success;
+	}
+
+	bool CompileVertexShader(std::string vertexShaderFilePath, unsigned int& vertexShader)
+	{
+		bool success = false;
+
+		vertexShader = glCreateShader(GL_VERTEX_SHADER);
+		std::string vertexShaderSource = GetShaderCode(vertexShaderFilePath);
+
+		char const* vertexSourcePointer = vertexShaderSource.c_str();
+		glShaderSource(vertexShader, 1, &vertexSourcePointer, NULL);
+		glCompileShader(vertexShader);
+
+		// Check Vertex Shader
+		GLint Result = GL_FALSE;
+		int InfoLogLength;
+		glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &Result);
+		glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
+		if (InfoLogLength > 0) {
+			std::vector<char> vertexShaderErrorMessage(InfoLogLength + 1);
+			glGetShaderInfoLog(vertexShader, InfoLogLength, NULL, &vertexShaderErrorMessage[0]);
+			return success;
+		}
+
+		success = true;
+		return success;
+	}
+
+	bool CreateShaderProgram(unsigned int& vertexShader, unsigned int& fragmentShader)
+	{
+		bool success = false;
+
+		m_quadShaderProgram = glCreateProgram();
+		glAttachShader(m_quadShaderProgram, vertexShader);
+		glAttachShader(m_quadShaderProgram, fragmentShader);
+		glLinkProgram(m_quadShaderProgram);
+		GLint Result = GL_FALSE;
+		int InfoLogLength = 0;
+		glGetProgramiv(m_quadShaderProgram, GL_LINK_STATUS, &Result);
+		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
+		glGetShaderInfoLog(m_quadShaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
+		if (InfoLogLength > 0)
+		{
+			return success;
+		}
+
+		success = true;
+		return success;
+	}
+
+	void DeleteShaders(unsigned int& vertexShader, unsigned int& fragmentShader)
+	{
+		glDeleteShader(vertexShader);
+		glDeleteShader(fragmentShader);
+	}
+
+	void Draw() 
+	{
+		// Update the texture
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, m_pixels);
+
+		// Draw the Quad
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
+
+	~GLFWViewer() 
+	{
+		glfwTerminate();
+		glfwDestroyWindow(m_window);
+
+		// DO NOT DELETE PIXELS. IT IS MANAGED SOMEWHERE ELSE
+	}
+
+	// OGL data variables
+	unsigned int m_VAO;
+	unsigned int m_quadShaderProgram;
+	GLuint m_texColorBuffer;
+
+	// This is the quad on the screen that will be used for showing the path traced image
+	int m_windowWidth, m_windowHeight;
+	GLFWwindow* m_window;
+
+	// Pixels used as a texture to paint the quad
+	glm::vec3* m_pixels;
+};
+
+// ------------------UTILITY FUNCTIONS------------------
+void saveToPPM(glm::vec3* pixels, int height, int width)
+{
+	std::ofstream renderFile;
+	renderFile.open("render.ppm");
+
+	renderFile << "P3" << std::endl;
+	renderFile << width << " " << height << std::endl;
+	renderFile << 255 << std::endl;
+
+	for (int i = 0; i < width * height; ++i)
+	{
+		renderFile << static_cast<int>(pixels[i].x) << " " << static_cast<int>(pixels[i].y) << " " << static_cast<int>(pixels[i].z) << std::endl;
+	}
+	renderFile.close();
+}
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) 
+{
+	glViewport(0, 0, width, height);
+}
+
+void processInput(GLFWwindow* window, Camera* camera, glm::vec3* pixels)
+{
+	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+		glfwSetWindowShouldClose(window, true);
+	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+		camera->ProcessKeyboard(0);
+	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+		camera->ProcessKeyboard(1);
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+		camera->ProcessKeyboard(2);
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+		camera->ProcessKeyboard(3);
+	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+		camera->ProcessKeyboard(4);
+	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+		camera->ProcessKeyboard(5);
+	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+		camera->ProcessKeyboard(6);
+	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+		camera->ProcessKeyboard(7);
+	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+		camera->ProcessKeyboard(8);
+	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+		camera->ProcessKeyboard(9);
+	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+	{
+		// TODO: SAVE THE SNAPSHOT TO FILE
+		saveToPPM(pixels, camera->m_screenHeight, camera->m_screenWidth);
+	}
+}
