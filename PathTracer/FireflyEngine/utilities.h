@@ -11,11 +11,122 @@
 #include "glad.h"
 #include "glfw/glfw3.h"
 
+#include "math_constants.h"
+
+#include "cuda_gl_interop.h"
+
+#include <curand.h>
+#include <curand_kernel.h>
 // ------------------DATA CONTAINER STRUCTS------------------
+
+__device__ bool isZero(const glm::vec3& v)
+{
+	return v.x == 0 && v.y == 0 && v.z == 0;
+}
+
+__device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
+{
+	const float r = sqrt(u1);
+	const float theta = 2 * CUDART_PI_F * u2;
+
+	const float x = r * cos(theta);
+	const float y = r * sin(theta);
+
+	return glm::vec3(x, y, sqrt(glm::max(0.0f, 1 - u1)));
+}
+
+struct BXDF
+{
+	bool m_isEmitter{ false };
+	glm::vec3 m_albedo;
+	glm::vec3 m_specularColor;
+	float m_refractiveIndex;
+	glm::vec3 m_emissiveColor;
+	float m_intensity;
+	glm::vec3 m_transmittanceColor;
+	
+	
+
+	
+	__device__ glm::vec3 bsdf(const glm::vec3& incoming, const glm::vec3& normal, glm::vec3& outgoing)
+	{
+		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+
+		//ASSUMPTION: incoming vector points away from the point of intersection
+
+		if (!isZero(m_emissiveColor))
+		{
+			outgoing = glm::vec3(0, 0, 0);
+			// means we have a light source
+			return m_emissiveColor * m_intensity;
+		}
+
+		//else other materials
+
+		//only diffuse for now
+		//TODO: add bsdf for every other material type
+		
+		// sample a point on hemisphere to return an outgoing ray
+		glm::vec2 sample;
+		curandGenerator_t gen;
+		curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
+		curandSetPseudoRandomGeneratorSeed(gen, 1234ULL);
+		curandGenerateUniform(gen, &sample[0], 1);
+		curandGenerateUniform(gen, &sample[1], 1);
+
+		// do warp from square to cosine weighted hemisphere
+
+		outgoing = CosineSampleHemisphere(sample[0], sample[1]);
+
+		return m_albedo * glm::dot(normal, incoming);
+	}
+
+	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing)
+	{
+		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+
+		//only diffuse for now
+		//TODO: add pdf for every other material type
+		return incoming.z / CUDART_PI_F;
+	}
+};
+
+enum GeometryType
+{
+	SPHERE,
+	PLANE,
+	TRIANGLEMESH
+};
+
+struct Triangle
+{
+	Triangle() = default;
+	Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
+		glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2,
+		glm::vec3 n0, glm::vec3 n1, glm::vec3 n2)
+		:m_v0(v0), m_v1(v1), m_v2(v2),
+		m_uv0(uv0), m_uv1(uv1), m_uv2(uv2),
+		m_n0(n0), m_n1(n1), m_n2(n2)
+	{
+	}
+	// Vertices
+	glm::vec3 m_v0;
+	glm::vec3 m_v1;
+	glm::vec3 m_v2;
+	// UV's
+	glm::vec2 m_uv0;
+	glm::vec2 m_uv1;
+	glm::vec2 m_uv2;
+	// Normals
+	glm::vec3 m_n0;
+	glm::vec3 m_n1;
+	glm::vec3 m_n2;
+};
+
 struct Geometry
 {
 	Geometry() = default;
-	Geometry(int geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale)
+	Geometry(GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle*> triangles = std::vector<Triangle*>(), float radius = 0.f)
 		: m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
 	{
 		// Translate Matrix
@@ -27,16 +138,52 @@ struct Geometry
 		// Scale Matrix
 		glm::mat4 scaleM = glm::scale(glm::mat4(1.0f), m_scale);
 		m_modelMatrix = translateM * rotateM * scaleM;
+
+		m_inverseModelMatrix = glm::inverse(m_modelMatrix);
+
+		switch (m_geometryType)
+		{
+			case GeometryType::SPHERE:
+				m_sphereRadius = radius;
+				break;
+			case GeometryType::PLANE:
+				break;
+			case GeometryType::TRIANGLEMESH:
+			{
+				if (triangles.empty())
+					return;
+				m_numberOfTriangles = (triangles).size();
+				m_triangles = new Triangle[m_numberOfTriangles];
+				for (int i = 0; i < m_numberOfTriangles; ++i)
+				{
+					m_triangles[i] = *(triangles[i]);
+				}
+				break;
+			}
+			default:
+				std::cout << "Geometry type is not supported yet!" << std::endl;
+		}
 	}
 
 	// Types:
 	// 1 - Plane
 	// 2 - Triangle Mesh
-	int m_geometryType;
+	// 3 - Sphere
+	GeometryType m_geometryType;
 	glm::vec3 m_position;
 	glm::vec3 m_rotation;
 	glm::vec3 m_scale;
 	glm::mat4 m_modelMatrix;
+
+	glm::mat4 m_inverseModelMatrix;
+
+	float m_sphereRadius;
+	// CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
+	glm::vec3 m_normal{0,0,1};
+	Triangle* m_triangles;
+	int m_numberOfTriangles;
+
+	BXDF* m_bxdf{nullptr};
 };
 
 struct Scene
@@ -60,63 +207,6 @@ struct Scene
 	int m_geometrySize;
 };
 
-struct Triangle
-{
-	Triangle() = default;
-	Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
-		glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2, 
-		glm::vec3 n0, glm::vec3 n1, glm::vec3 n2)
-		:m_v0(v0), m_v1(v1), m_v2(v2),
-		m_uv0(uv0), m_uv1(uv1), m_uv2(uv2),
-		m_n0(n0), m_n1(n1), m_n2(n2)
-	{
-	}
-	// Vertices
-	glm::vec3 m_v0;
-	glm::vec3 m_v1;
-	glm::vec3 m_v2;
-	// UV's
-	glm::vec2 m_uv0;
-	glm::vec2 m_uv1;
-	glm::vec2 m_uv2;
-	// Normals
-	glm::vec3 m_n0;
-	glm::vec3 m_n1;
-	glm::vec3 m_n2;
-};
-
-struct Plane : Geometry
-{
-	Plane() = default;
-	Plane(int type, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, glm::vec3 normal)
-		: Geometry(type, position, rotation, scale), m_normal(normal)
-	{
-	}
-	glm::vec3 m_normal;
-};
-
-struct Mesh : Geometry
-{
-	Mesh() = default;
-	Mesh(int type, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle*> triangles)
-		: Geometry(type, position, rotation, scale)
-	{
-		m_numberOfTriangles = triangles.size();
-		m_triangles = new Triangle[m_numberOfTriangles];
-		for (int i = 0; i < m_numberOfTriangles; ++i)
-		{
-			m_triangles[i] = *(triangles[i]);
-		}
-	}
-
-	~Mesh() 
-	{
-		delete m_triangles;
-	}
-	Triangle* m_triangles;
-	int m_numberOfTriangles;
-};
-
 struct Intersect 
 {
 	Intersect() = default;
@@ -126,6 +216,11 @@ struct Intersect
 
 struct Ray
 {
+	Ray() = default;
+	__device__ Ray(glm::vec3 origin, glm::vec3 direction)
+		:m_origin(origin), m_direction(direction)
+	{
+	}
 	glm::vec3 m_origin;
 	glm::vec3 m_direction;
 	// TODO: Padding
@@ -345,11 +440,11 @@ struct GLFWViewer {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-		// Create texture data (4-component unsigned byte)
+		// Create texture data (3-component unsigned byte)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, NULL);
 
 		// Compile the vertex and fragmnet shader and create a shader program
-		std::string programPath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
+		std::string programPath = R"(D:\PathTracers\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
 		std::string vertexShaderPath = programPath + R"(QuadVertexShader.glsl)";
 		std::string fragmentShaderPath = programPath + R"(QuadFragmentShader.glsl)";
 		unsigned int fragmentShader;
@@ -380,6 +475,7 @@ struct GLFWViewer {
 		glBindVertexArray(m_VAO);
 		// Bind the texture
 		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+		//cudaGraphicsGLRegisterImage(&g_CUDAGraphicsResource[0], m_texColorBuffer, GL_TEXTURE_2D, cudaGraphicsMapFlagsWriteDiscard);
 	}
 
 	std::string GetShaderCode(std::string filePath)
@@ -512,6 +608,14 @@ struct GLFWViewer {
 
 	// Pixels used as a texture to paint the quad
 	glm::vec3* m_pixels;
+
+	// The CUDA Graphics Resource is used to map the OpenGL texture to a CUDA
+	// buffer that can be used in a CUDA kernel.
+	// We need 2 resource: One will be used to map to the color attachment of the
+	//   framebuffer and used read-only from the CUDA kernel (SRC_BUFFER), 
+	//   the second is used to write the postprocess effect to (DST_BUFFER).
+	cudaGraphicsResource_t g_CUDAGraphicsResource[2] = { 0, 0 };
+
 };
 
 // ------------------UTILITY FUNCTIONS------------------

@@ -25,9 +25,25 @@ __global__ void generateRays(Ray* rays, Camera* camera)
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 }
 
+__device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect& intersect)
+{
+	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+
+	float denom = glm::dot(plane.m_normal, ray.m_direction);
+	if (denom > 1e-7) 
+	{
+		glm::vec3 p0l0 = - ray.m_origin;
+		intersect.m_t = glm::dot(p0l0, plane.m_normal) / denom;
+		return (intersect.m_t >= 0);
+	}
+	return false;
+}
+
 __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Intersect& intersect)
 {
-	const float EPSILON = 0.0000001;
+	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+
+	const float EPSILON = 1e-7;
 	glm::vec3 vertex0 = triangle.m_v0;
 	glm::vec3 vertex1 = triangle.m_v1;
 	glm::vec3 vertex2 = triangle.m_v2;
@@ -67,7 +83,15 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	}
 }
 
-__global__ void intersectRays(Camera* camera, Ray* rays, Triangle* triangles, glm::vec3* pixels)
+__device__ bool intersectTriangles(Triangle* triangles, int numTriangles, const Ray& ray, Intersect& intersect)
+{
+	for (int i = 0; i < numTriangles; ++i)
+	{
+		return intersectTriangle(triangles[i], ray, intersect);
+	}
+}
+
+__global__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, glm::vec3* pixels)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -81,12 +105,28 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Triangle* triangles, gl
 
 	Intersect intersect;
 
-	for (int i = 0; i < 10; ++i) 
+	// loop through all geometries, find the smallest "t" value for a single ray
+	for (int i = 0; i < 1; ++i) 
 	{
-		if (intersectTriangle(triangles[i], rays[pixelIndex], intersect)) 
+		Geometry& geometry = geometries[i];
+
+		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(rays[pixelIndex].m_origin, 1.f), geometry.m_inverseModelMatrix * glm::vec4(rays[pixelIndex].m_direction, 0.f));
+		
+		switch(geometry.m_geometryType)
 		{
-			pixels[pixelIndex] = glm::vec3(255, 0.0f, 0.0f);
-			continue;
+			case GeometryType::TRIANGLEMESH:
+				if (intersectTriangles(geometry.m_triangles, geometry.m_numberOfTriangles, objectSpaceRay, intersect))
+				{
+					pixels[pixelIndex] = glm::vec3(255, 0.0f, 0.0f);
+					continue;
+				}
+				break;
+			case GeometryType::PLANE:
+				break;
+			case GeometryType::SPHERE:
+				break;
+			default:
+				return;
 		}
 	}
 }
@@ -105,14 +145,15 @@ int main()
 			glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(0.0f));
 		trianglesInMesh.push_back(triangle);
 	}
-	Mesh* triangleMesh = new Mesh(2, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f), trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	int windowWidth = 800;
 	int windowHeight = 800;
 	int dataSize = windowWidth * windowHeight;
 
-	Triangle* d_triangle = nullptr;
-	cudaMalloc((void**)&d_triangle, sizeof(Triangle) * triangleMesh->m_numberOfTriangles);
+
+	Geometry* d_geometry = nullptr;
+	cudaMalloc((void**)&d_geometry, sizeof(Geometry) * 1);
 
 	Ray* d_rays = nullptr;
 	cudaMalloc((void**)&d_rays, dataSize * sizeof(Ray));
@@ -151,7 +192,7 @@ int main()
 	Camera* d_camera = nullptr;
 	cudaMalloc((void**)&d_camera, sizeof(Camera));
 
-	cudaMemcpy(d_triangle, triangleMesh->m_triangles, sizeof(Triangle) * triangleMesh->m_numberOfTriangles, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_geometry, triangleMeshGeometry, sizeof(Geometry) * 1, cudaMemcpyHostToDevice);
 
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
@@ -164,7 +205,7 @@ int main()
 			pixels[i] = glm::vec3(255.f, 255.f, 255.f);
 		}
 		cudaMemcpy(d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
-		intersectRays << <gridSize, blockSize >> > (d_camera, d_rays, d_triangle, d_pixels);
+		intersectRays << <gridSize, blockSize >> > (d_camera, d_rays, d_geometry, d_pixels);
 		cudaMemcpy(pixels, d_pixels, sizeof(glm::vec3) * dataSize, cudaMemcpyDeviceToHost);
 
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -176,8 +217,8 @@ int main()
 		glfwPollEvents();
 	}
 	
-	//Ray* rays = new Ray[dataSize];
-	//cudaMemcpy(rays, d_rays, dataSize * sizeof(Ray), cudaMemcpyDeviceToHost);
+	Ray* rays = new Ray[dataSize];
+	cudaMemcpy(rays, d_rays, dataSize * sizeof(Ray), cudaMemcpyDeviceToHost);
 
 	delete pixels;
 	return 0;
