@@ -17,6 +17,20 @@
 
 #include <curand.h>
 #include <curand_kernel.h>
+
+// Error Reporting
+#define cudaCheckErrors(msg) \
+    do { \
+        cudaError_t __err = cudaGetLastError(); \
+        if (__err != cudaSuccess) { \
+            fprintf(stderr, "Fatal error: %s (%s at %s:%d)\n", \
+                msg, cudaGetErrorString(__err), \
+                __FILE__, __LINE__); \
+            fprintf(stderr, "*** FAILED - ABORTING\n"); \
+            exit(1); \
+        } \
+    } while (0)
+
 // ------------------DATA CONTAINER STRUCTS------------------
 
 __device__ bool isZero(const glm::vec3& v)
@@ -444,7 +458,7 @@ struct GLFWViewer {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, NULL);
 
 		// Compile the vertex and fragmnet shader and create a shader program
-		std::string programPath = R"(D:\PathTracers\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
+		std::string programPath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
 		std::string vertexShaderPath = programPath + R"(QuadVertexShader.glsl)";
 		std::string fragmentShaderPath = programPath + R"(QuadFragmentShader.glsl)";
 		unsigned int fragmentShader;
