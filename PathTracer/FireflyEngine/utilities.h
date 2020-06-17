@@ -18,6 +18,9 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
+#define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
+#include "tiny_obj_loader.h"
+
 // Error Reporting
 #define cudaCheckErrors(msg) \
     do { \
@@ -140,15 +143,15 @@ struct Triangle
 struct Geometry
 {
 	Geometry() = default;
-	Geometry(GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle*> triangles = std::vector<Triangle*>(), float radius = 0.f)
+	Geometry(GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle> triangles = std::vector<Triangle>(), float radius = 0.f)
 		: m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
 	{
 		// Translate Matrix
 		glm::mat4 translateM = glm::translate(glm::mat4(1.0f), m_position);
 		// Rotate Matrix
-		glm::mat4 rotateM = glm::rotate(glm::mat4(1.0f), m_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-		rotateM *= glm::rotate(glm::mat4(1.0f), m_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-		rotateM *= glm::rotate(glm::mat4(1.0f), m_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+		glm::mat4 rotateM = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+		rotateM *= glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+		rotateM *= glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
 		// Scale Matrix
 		glm::mat4 scaleM = glm::scale(glm::mat4(1.0f), m_scale);
 		m_modelMatrix = translateM * rotateM * scaleM;
@@ -170,7 +173,7 @@ struct Geometry
 				m_triangles = new Triangle[m_numberOfTriangles];
 				for (int i = 0; i < m_numberOfTriangles; ++i)
 				{
-					m_triangles[i] = *(triangles[i]);
+					m_triangles[i] = triangles[i];
 				}
 				break;
 			}
@@ -629,10 +632,70 @@ struct GLFWViewer {
 	//   framebuffer and used read-only from the CUDA kernel (SRC_BUFFER), 
 	//   the second is used to write the postprocess effect to (DST_BUFFER).
 	cudaGraphicsResource_t g_CUDAGraphicsResource[2] = { 0, 0 };
-
 };
 
 // ------------------UTILITY FUNCTIONS------------------
+void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
+{
+	tinyobj::attrib_t attrib;
+	std::vector<tinyobj::shape_t> shapes;
+	std::vector<tinyobj::material_t> materials;
+
+	std::string warn;
+	std::string err;
+
+	bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, meshFilePath.c_str());
+
+	if (!warn.empty())
+	{
+		std::cout << warn << std::endl;
+	}
+
+	if (!err.empty())
+	{
+		std::cerr << err << std::endl;
+	}
+
+	if (!ret)
+	{
+		std::cout << "Error loading mesh";
+		return;
+	}
+
+	// Loop over shapes
+	for (size_t s = 0; s < shapes.size(); s++) {
+		// Loop over faces(polygon)
+		size_t index_offset = 0;
+		for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+			int fv = shapes[s].mesh.num_face_vertices[f];
+
+			std::vector<glm::vec3> triangleVertices;
+			std::vector<glm::vec2> triangleUVS;
+			std::vector<glm::vec3> triangleNormals;
+			// Loop over vertices in the face.
+			for (size_t v = 0; v < fv; v++) {
+				// access to vertex
+				tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+				triangleVertices.push_back(glm::vec3(attrib.vertices[3 * idx.vertex_index + 0], attrib.vertices[3 * idx.vertex_index + 1], attrib.vertices[3 * idx.vertex_index + 2]));
+				triangleNormals.push_back(glm::vec3(attrib.normals[3 * idx.normal_index + 0], attrib.normals[3 * idx.normal_index + 1], attrib.normals[3 * idx.normal_index + 2]));
+				triangleUVS.push_back(glm::vec2(attrib.texcoords[2 * idx.texcoord_index + 0], attrib.texcoords[2 * idx.texcoord_index + 1]));
+				// Optional: vertex colors
+				// tinyobj::real_t red = attrib.colors[3*idx.vertex_index+0];
+				// tinyobj::real_t green = attrib.colors[3*idx.vertex_index+1];
+				// tinyobj::real_t blue = attrib.colors[3*idx.vertex_index+2];
+			}
+			index_offset += fv;
+
+			// loading new trinagle
+			Triangle newTriangle(triangleVertices[0], triangleVertices[1], triangleVertices[2], triangleUVS[0], triangleUVS[1], triangleUVS[2], triangleNormals[0], triangleNormals[1], triangleNormals[2]);
+			trianglesInMesh.push_back(newTriangle);
+
+			// per-face material
+			shapes[s].mesh.material_ids[f];
+		}
+	}
+}
+
 void saveToPPM(glm::vec3* pixels, int height, int width)
 {
 	std::ofstream renderFile;

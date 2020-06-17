@@ -126,20 +126,12 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, g
 
 int main()
 {
-	// Load a triangle mesh
-	std::vector<Triangle*> trianglesInMesh;
-	for (int i = 0 ; i < 10; ++i)
-	{
-		Triangle* triangle = new Triangle(
-			glm::vec3(i, i, i),
-			glm::vec3(i + 1.f, i + 1.0f, 0.0f),
-			glm::vec3(i + 2.f, 0.0f, 0.0f),
-			glm::vec2(0.0f), glm::vec2(0.0f), glm::vec2(0.0f),
-			glm::vec3(0.0f), glm::vec3(0.0f), glm::vec3(0.0f));
-		trianglesInMesh.push_back(triangle);
-	}
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f), glm::vec3(1.0f), trianglesInMesh);
+	// TODO: Load meshes with Tinyobj loader
+	std::vector<Triangle> trianglesInMesh;
+	LoadMesh(R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\sceneResources\wahoo.obj)", trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 0.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
+	// TODO: Load scene from file
 	int windowWidth = 800;
 	int windowHeight = 800;
 	int dataSize = windowWidth * windowHeight;

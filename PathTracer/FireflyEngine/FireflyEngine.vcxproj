@@ -84,6 +84,7 @@
     <CudaCompile Include="kernel.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="tiny_obj_loader.h" />
     <ClInclude Include="utilities.h" />
   </ItemGroup>
   <ItemGroup>
