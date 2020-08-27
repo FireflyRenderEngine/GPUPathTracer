@@ -3,7 +3,8 @@
 #include "device_launch_parameters.h"
 #include "utilities.h"
 
-__global__ void generateRays(Ray* rays, Camera* camera)
+
+__device__ void generateRays(Ray* rays, Camera* camera)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -81,7 +82,7 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	}
 }
 
-__global__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, glm::vec3* pixels)
+__device__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, glm::vec3* pixels)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -96,18 +97,18 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, g
 	Intersect intersect;
 
 	// loop through all geometries, find the smallest "t" value for a single ray
-	for (int i = 0; i < 1; ++i) 
+	for (int i = 0; i < 2; ++i) 
 	{
-		Geometry* geometry = geometries;
+		Geometry geometry = geometries[i];
 
-		Ray& objectSpaceRay = Ray(geometry->m_inverseModelMatrix * glm::vec4(rays[pixelIndex].m_origin, 1.f), geometry->m_inverseModelMatrix * glm::vec4(rays[pixelIndex].m_direction, 0.f));
+		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(rays[pixelIndex].m_origin, 1.f), geometry.m_inverseModelMatrix * glm::vec4(rays[pixelIndex].m_direction, 0.f));
 		
-		switch(geometry->m_geometryType)
+		switch(geometry.m_geometryType)
 		{
 			case GeometryType::TRIANGLEMESH:
-				for (int i = 0; i < geometry->m_numberOfTriangles; ++i)
+				for (int i = 0; i < geometry.m_numberOfTriangles; ++i)
 				{
-					if (intersectTriangle(geometry->m_triangles[i], objectSpaceRay, intersect))
+					if (intersectTriangle(geometry.m_triangles[i], objectSpaceRay, intersect))
 					{
 						pixels[pixelIndex] = glm::vec3(255, 0.0f, 0.0f);
 						continue;
@@ -115,6 +116,11 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, g
 				}
 				break;
 			case GeometryType::PLANE:
+				if (intersectPlane(geometry, objectSpaceRay, intersect))
+				{
+					pixels[pixelIndex] = glm::vec3(0.f, 255.0f, 0.0f);
+					continue;
+				}
 				break;
 			case GeometryType::SPHERE:
 				break;
@@ -124,12 +130,27 @@ __global__ void intersectRays(Camera* camera, Ray* rays, Geometry* geometries, g
 	}
 }
 
+__global__ void launchPathTrace(PathTracerState* state)
+{
+	generateRays(state->d_rays, state->d_camera);
+	intersectRays(state->d_camera, state->d_rays, state->d_geometry, state->d_pixels);
+}
+
 int main()
 {
-	// TODO: Load meshes with Tinyobj loader
+	PathTracerState* state;
+
+	cudaMallocManaged((void**)&state, sizeof(PathTracerState));
+
 	std::vector<Triangle> trianglesInMesh;
-	LoadMesh(R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\sceneResources\wahoo.obj)", trianglesInMesh);
+	LoadMesh(R"(D:\PathTracers\FireflyRenderEngine\GPUPathTracer\sceneResources\wahoo.obj)", trianglesInMesh);
 	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 0.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
+
+	Geometry* planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -1.f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(2.f, 2.f, 1.0f));
+
+	std::vector<Geometry> geometries;
+	geometries.push_back(*triangleMeshGeometry);
+	geometries.push_back(*planeLightGeometry);
 
 	// TODO: Load scene from file
 	int windowWidth = 800;
@@ -137,34 +158,39 @@ int main()
 	int dataSize = windowWidth * windowHeight;
 
 	// First we will copy the base geometry object to device memory
-	Geometry* d_geometry = nullptr;
-	cudaMalloc((void**)&d_geometry, sizeof(Geometry) * 1);
+	state->d_geometry = nullptr;
+	cudaMalloc((void**)&(state->d_geometry), sizeof(Geometry) * geometries.size());
 	cudaCheckErrors("cudaMalloc geometry fail");
-	cudaMemcpy(d_geometry, triangleMeshGeometry, sizeof(Geometry) * 1, cudaMemcpyHostToDevice);
+	cudaMemcpy(state->d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
 	cudaCheckErrors("cudaMemcpy geometry fail");
-	// Now we will save the internal data to device memory
-	Triangle* hostTriangleData;
-	cudaMalloc((void**)&hostTriangleData, sizeof(Triangle) * triangleMeshGeometry->m_numberOfTriangles);
-	cudaCheckErrors("cudaMalloc host triangle data fail");
-	cudaMemcpy(hostTriangleData, triangleMeshGeometry->m_triangles, sizeof(Triangle) * triangleMeshGeometry->m_numberOfTriangles, cudaMemcpyHostToDevice);
-	cudaCheckErrors("cudaMemcpy host triangle data fail");
-	cudaMemcpy(&(d_geometry->m_triangles), &hostTriangleData, sizeof(Triangle*), cudaMemcpyHostToDevice);
-	cudaCheckErrors("cudaMemcpy device triangle data fail");
 
-	Ray* d_rays = nullptr;
-	cudaMalloc((void**)&d_rays, dataSize * sizeof(Ray));
+	// Now we will save the internal triangle data to device memory
+	for (int i = 0; i < geometries.size(); ++i)
+	{
+		if (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH)
+		{
+			// TODO: Figure out a better way to allocate and deallocate this hostTriangleData
+			Triangle* hostTriangleData;
+			cudaMallocManaged((void**)&hostTriangleData, sizeof(Triangle) * triangleMeshGeometry->m_numberOfTriangles);
+			cudaCheckErrors("cudaMalloc host triangle data fail");
+			cudaMemcpy(hostTriangleData, triangleMeshGeometry->m_triangles, sizeof(Triangle) * triangleMeshGeometry->m_numberOfTriangles, cudaMemcpyHostToDevice);
+			cudaCheckErrors("cudaMemcpy host triangle data fail");
+			cudaMemcpy(&(state->d_geometry[i].m_triangles), &hostTriangleData, sizeof(Triangle*), cudaMemcpyHostToDevice);
+			cudaCheckErrors("cudaMemcpy device triangle data fail");
+		}
+	}
+	
+
+	state->d_rays = nullptr;
+	cudaMalloc((void**)&(state->d_rays), dataSize * sizeof(Ray));
 	cudaCheckErrors("cudaMalloc rays fail");
 
 	glm::vec3* pixels = new glm::vec3[dataSize];
-	// Initialize all the pixels with a base color of white
-	for (int i = 0 ; i < dataSize; ++i) 
-	{
-		pixels[i] = glm::vec3(255.f, 255.f, 255.f);
-	}
-	glm::vec3* d_pixels = nullptr;
-	cudaMalloc((void**)&d_pixels, dataSize * sizeof(glm::vec3));
+	
+	state->d_pixels = nullptr;
+	cudaMalloc((void**)&(state->d_pixels), dataSize * sizeof(glm::vec3));
 	cudaCheckErrors("cudaMalloc pixels fail");
-	cudaMemcpy(d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	cudaMemcpy(state->d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	cudaCheckErrors("cudaMemcpy pixels fail");
 
 	dim3 blockSize(16, 16, 1);
@@ -188,25 +214,26 @@ int main()
 	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
 	viewer->Create();
 
-	Camera* d_camera = nullptr;
-	cudaMalloc((void**)&d_camera, sizeof(Camera));
+	state->d_camera = nullptr;
+	cudaMalloc((void**)&(state->d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
 		processInput(viewer->m_window, camera, pixels);
-		cudaMemcpy(d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
+		cudaMemcpy(state->d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
 		cudaCheckErrors("cudaMemcpy camera data fail");
-		generateRays << <gridSize, blockSize >> > (d_rays, d_camera);
 		// Initialize all the pixels with a base color of white
 		for (int i = 0; i < dataSize; ++i)
 		{
 			pixels[i] = glm::vec3(255.f, 255.f, 255.f);
 		}
-		cudaMemcpy(d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+		
+		cudaMemcpy(state->d_pixels, pixels, dataSize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 		cudaCheckErrors("cudaMemcpy pixels to device fail");
-		intersectRays << <gridSize, blockSize >> > (d_camera, d_rays, d_geometry, d_pixels);
-		cudaMemcpy(pixels, d_pixels, sizeof(glm::vec3) * dataSize, cudaMemcpyDeviceToHost);
+		launchPathTrace << < gridSize, blockSize >> > (state);
+		cudaDeviceSynchronize();
+		cudaMemcpy(pixels, state->d_pixels, sizeof(glm::vec3) * dataSize, cudaMemcpyDeviceToHost);
 		cudaCheckErrors("cudaMemcpy pixels to host fail");
 
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -219,9 +246,14 @@ int main()
 	}
 	
 	Ray* rays = new Ray[dataSize];
-	cudaMemcpy(rays, d_rays, dataSize * sizeof(Ray), cudaMemcpyDeviceToHost);
+	cudaMemcpy(rays, state->d_rays, dataSize * sizeof(Ray), cudaMemcpyDeviceToHost);
 	cudaCheckErrors("cudaMemcpy rays to host fail");
 
-	delete pixels;
+	cleanCUDAMemory(state);
+	delete[] pixels;
+	delete[] rays;
+	delete viewer;
+	delete triangleMeshGeometry;
+	//cudaFree(hostTriangleData);
 	return 0;
 }

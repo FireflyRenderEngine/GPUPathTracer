@@ -21,6 +21,8 @@
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
 
+#include "kernel.h"
+
 // Error Reporting
 #define cudaCheckErrors(msg) \
     do { \
@@ -35,6 +37,15 @@
     } while (0)
 
 // ------------------DATA CONTAINER STRUCTS------------------
+
+void cleanCUDAMemory(PathTracerState* state)
+{
+	cudaFree(state->d_camera);
+	cudaFree(state->d_geometry);
+	cudaFree(state->d_pixels);
+	cudaFree(state->d_rays);
+	cudaFree(state);
+}
 
 __device__ bool isZero(const glm::vec3& v)
 {
@@ -197,7 +208,7 @@ struct Geometry
 	float m_sphereRadius;
 	// CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
 	glm::vec3 m_normal{0,0,1};
-	Triangle* m_triangles;
+	Triangle* m_triangles{ nullptr };
 	int m_numberOfTriangles;
 
 	BXDF* m_bxdf{nullptr};
@@ -261,8 +272,8 @@ struct Camera
 	float m_nearClip;
 	float m_farClip;
 	// Camera options
-	float m_cameraMovementSpeed = 0.3f;
-	float m_cameraMouseSensitivity = 0.3f;
+	float m_cameraMovementSpeed = 0.8f;
+	float m_cameraMouseSensitivity = 0.8f;
 	bool m_cameraFirstMouseInput = false;
 	float m_xDelta = 0.f;
 	float m_yDelta = 0.f;
@@ -461,7 +472,7 @@ struct GLFWViewer {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, NULL);
 
 		// Compile the vertex and fragmnet shader and create a shader program
-		std::string programPath = R"(C:\Users\rudra\Documents\Projects\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
+		std::string programPath = R"(D:\PathTracers\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
 		std::string vertexShaderPath = programPath + R"(QuadVertexShader.glsl)";
 		std::string fragmentShaderPath = programPath + R"(QuadFragmentShader.glsl)";
 		unsigned int fragmentShader;
@@ -743,7 +754,6 @@ void processInput(GLFWwindow* window, Camera* camera, glm::vec3* pixels)
 		camera->ProcessKeyboard(9);
 	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
-		// TODO: SAVE THE SNAPSHOT TO FILE
 		saveToPPM(pixels, camera->m_screenHeight, camera->m_screenWidth);
 	}
 }
