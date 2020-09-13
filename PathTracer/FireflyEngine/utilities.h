@@ -62,50 +62,78 @@ __device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
 	return glm::vec3(x, y, sqrt(glm::max(0.0f, 1 - u1)));
 }
 
+struct Intersect
+{
+	Intersect() = default;
+	glm::vec3 m_intersectionPoint;
+	glm::vec3 m_normal;
+	float m_t{ 0.f };
+	bool m_hit{ false };
+	int geometryIndex{ -1 };
+	int triangleIndex{ -1 };
+};
+
+enum BXDFTyp
+{
+	EMITTER,
+	DIFFUSE,
+	MIRROR,
+	GLASS,
+	COUNT
+};
+
 struct BXDF
 {
-	bool m_isEmitter{ false };
-	glm::vec3 m_albedo;
-	glm::vec3 m_specularColor;
-	float m_refractiveIndex;
-	glm::vec3 m_emissiveColor;
-	float m_intensity;
-	glm::vec3 m_transmittanceColor;
+	BXDF() = default;
 	
-	
+	BXDFTyp m_type{ BXDFTyp::COUNT };
 
+	glm::vec3 m_albedo{ -1,-1,-1 };
+	glm::vec3 m_specularColor{ -1,-1,-1 };
+	float m_refractiveIndex{ -1 };
+	glm::vec3 m_emissiveColor{ -1,-1,-1 };
+	float m_intensity{ -1 };
+	glm::vec3 m_transmittanceColor{ -1,-1,-1 };
 	
-	__device__ glm::vec3 bsdf(const glm::vec3& incoming, const glm::vec3& normal, glm::vec3& outgoing)
+	__device__ glm::vec3 bsdf(const glm::vec3& incoming, const glm::vec3& normal, glm::vec3& outgoing, const Intersect& intersect)
 	{
 		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 
 		//ASSUMPTION: incoming vector points away from the point of intersection
 
-		if (!isZero(m_emissiveColor))
+		if (m_type == BXDFTyp::EMITTER)
 		{
+			// CLARIFICATION: we assume that all area lights are two-sided
+			bool twoSided = true;
 			outgoing = glm::vec3(0, 0, 0);
 			// means we have a light source
-			return m_emissiveColor * m_intensity;
+			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, incoming) > 0)) ? m_emissiveColor * m_intensity : noHitColor();
 		}
 
 		//else other materials
 
 		//only diffuse for now
 		//TODO: add bsdf for every other material type
-		
-		// sample a point on hemisphere to return an outgoing ray
-		glm::vec2 sample;
-		curandGenerator_t gen;
-		curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
-		curandSetPseudoRandomGeneratorSeed(gen, 1234ULL);
-		curandGenerateUniform(gen, &sample[0], 1);
-		curandGenerateUniform(gen, &sample[1], 1);
+		if (BXDFTyp::DIFFUSE)
+		{
+			// sample a point on hemisphere to return an outgoing ray
+			glm::vec2 sample;
 
-		// do warp from square to cosine weighted hemisphere
+			int id = threadIdx.x + blockIdx.x * blockDim.x;
+			/* Each thread gets same seed, a different sequence
+			   number, no offset */
+			curandState state;
+			curand_init(1234, id, 0, &state);
 
-		outgoing = CosineSampleHemisphere(sample[0], sample[1]);
+			sample[0] = curand_uniform(&state);
+			sample[1] = curand_uniform(&state);
 
-		return m_albedo * glm::dot(normal, incoming);
+			// do warp from square to cosine weighted hemisphere
+
+			outgoing = CosineSampleHemisphere(sample[0], sample[1]);
+
+			return m_albedo * glm::abs(glm::dot(normal, incoming));
+		}
 	}
 
 	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing)
@@ -232,14 +260,6 @@ struct Scene
 	}
 	Geometry* m_geometries;
 	int m_geometrySize;
-};
-
-struct Intersect 
-{
-	Intersect() = default;
-	glm::vec3 m_intersectionPoint;
-	glm::vec3 m_normal;
-	float m_t{ 0.f };
 };
 
 struct Ray
@@ -756,13 +776,13 @@ void processInput(GLFWwindow* window, Camera* camera, glm::vec3* pixels)
 		camera->ProcessKeyboard(4);
 	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
 		camera->ProcessKeyboard(5);
-	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-		camera->ProcessKeyboard(6);
 	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+		camera->ProcessKeyboard(6);
+	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
 		camera->ProcessKeyboard(7);
-	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-		camera->ProcessKeyboard(8);
 	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+		camera->ProcessKeyboard(8);
+	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
 		camera->ProcessKeyboard(9);
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
 		camera->ProcessKeyboard(10);
