@@ -484,7 +484,7 @@ struct GLFWViewer {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, NULL);
 
 		// Compile the vertex and fragmnet shader and create a shader program
-		std::string programPath = R"(D:\PathTracers\FireflyRenderEngine\GPUPathTracer\shaderResource\)";
+		std::string programPath = R"(..\..\shaderResource\)";
 		std::string vertexShaderPath = programPath + R"(QuadVertexShader.glsl)";
 		std::string fragmentShaderPath = programPath + R"(QuadFragmentShader.glsl)";
 		unsigned int fragmentShader;

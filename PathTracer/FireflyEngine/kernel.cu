@@ -208,7 +208,7 @@ int main()
 	cudaMallocManaged((void**)&state, sizeof(PathTracerState));
 
 	std::vector<Triangle> trianglesInMesh;
-	LoadMesh(R"(D:\PathTracers\FireflyRenderEngine\GPUPathTracer\sceneResources\rocketman.obj)", trianglesInMesh);
+	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
 	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 180.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	Geometry* planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -5.f, 0.f), glm::vec3(45.f, 0.f, 0.f), glm::vec3(5.f));
