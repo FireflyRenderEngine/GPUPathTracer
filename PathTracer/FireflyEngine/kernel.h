@@ -9,7 +9,7 @@ struct PathTracerState
 {
 	// device side variables
 	Geometry* d_geometry{ nullptr };
-	Ray* d_rays{ nullptr };
 	glm::vec3* d_pixels{ nullptr };
 	Camera* d_camera{ nullptr };
+	unsigned int d_raysToTrace{ 0 };
 };

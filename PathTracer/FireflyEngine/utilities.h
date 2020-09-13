@@ -43,7 +43,6 @@ void cleanCUDAMemory(PathTracerState* state)
 	cudaFree(state->d_camera);
 	cudaFree(state->d_geometry);
 	cudaFree(state->d_pixels);
-	cudaFree(state->d_rays);
 	cudaFree(state);
 }
 
@@ -239,6 +238,7 @@ struct Intersect
 {
 	Intersect() = default;
 	glm::vec3 m_intersectionPoint;
+	glm::vec3 m_normal;
 	float m_t{ 0.f };
 };
 
@@ -363,6 +363,10 @@ struct Camera
 			m_pitch -= 1.0f;
 			UpdateBasisAxis();
 		}
+		if (direction == 10) // PITCHDOWN
+		{
+			resetCamera();
+		}
 	}
 
 	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
@@ -399,6 +403,14 @@ struct Camera
 		// Also re-calculate the Right and Up vector
 		m_right = glm::normalize(glm::cross(m_forward, m_worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		m_up = glm::normalize(glm::cross(m_right, m_forward));
+	}
+
+	void resetCamera()
+	{
+		m_position = glm::vec3(0.f, 0.f, 15.f);
+		m_pitch = 0.f;
+		m_yaw = -90.f;
+		UpdateBasisAxis();
 	}
 };
 
@@ -752,6 +764,8 @@ void processInput(GLFWwindow* window, Camera* camera, glm::vec3* pixels)
 		camera->ProcessKeyboard(8);
 	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 		camera->ProcessKeyboard(9);
+	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+		camera->ProcessKeyboard(10);
 	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
 		saveToPPM(pixels, camera->m_screenHeight, camera->m_screenWidth);
