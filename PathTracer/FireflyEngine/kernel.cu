@@ -28,36 +28,69 @@ __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect&
 	return false;
 }
 
+// fast Triangle intersection : https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf
 __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Intersect& intersect)
 {
 	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-	const float EPSILON = 1e-7;
+	const float EPSILON = 0.000001;
 	glm::vec3 vertex0 = triangle.m_v0;
 	glm::vec3 vertex1 = triangle.m_v1;
 	glm::vec3 vertex2 = triangle.m_v2;
-	glm::vec3 edge1, edge2, h, s, q;
-	float a, f, u, v;
+	glm::vec3 edge1, edge2, pvec, tvec, qvec;
+	float det, invDet, u, v;
 	edge1 = vertex1 - vertex0;
 	edge2 = vertex2 - vertex0;
-	h = glm::cross(ray.m_direction, edge2);
-	a = glm::dot(edge1, h);
-	if (a > -EPSILON && a < EPSILON)
-	{
+
+	// Normal for backface culling
+	glm::vec3 Normal = glm::cross(edge1, edge2);
+	if (glm::dot(ray.m_direction, Normal) > 0) {
+		return false; // back-facing surface
+	}
+
+	pvec = glm::cross(ray.m_direction, edge2);
+	det = glm::dot(edge1, pvec);
+
+	// BACKFACE CULLING
+	if (det < EPSILON) {
 		return false;    // This ray is parallel to this triangle.
 	}
-	f = 1.0 / a;
-	s = ray.m_origin - vertex0;
-	u = f * glm::dot(s, h);
-	if (u < 0.0 || u > 1.0)
-	{
+
+	tvec = ray.m_origin - vertex0;
+	u = glm::dot(tvec, pvec);
+
+	if (u < 0.0f || u > det) {
 		return false;
 	}
-	q = glm::cross(s, edge1);
-	v = f * glm::dot(ray.m_direction, q);
-	if (v < 0.0 || u + v > 1.0)
+
+	qvec = glm::cross(tvec, edge1);
+
+	v = glm::dot(ray.m_direction, qvec);
+	if (v < 0.0f || u + v > det) {
 		return false;
+	}
+
+	float t = glm::dot(edge2, qvec);
+
+	invDet = 1.0 / det;
+
+	t *= invDet;
+	u *= invDet;
+	v *= invDet;
+
+	//if (det)
+
+	////u = invDet * glm::dot(tvec, pvec);
+	//if (u < 0.0 || u > 1.0)
+	//{
+	//	return false;
+	//}
+	////v = invDet * ;
+	//if (v < 0.0 || u + v > 1.0)
+	//	return false;
+
+
 	// At this stage we can compute t to find out where the intersection point is on the line.
-	float t = f * glm::dot(edge2, q);
+	//float t = invDet * glm::dot(edge2, qvec);
 	if (t > EPSILON) // ray intersection
 	{
 		intersect.m_intersectionPoint = ray.m_origin + ray.m_direction * t;
@@ -71,18 +104,26 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	}
 }
 
-__device__ void setIntersection(int& tMax, Intersect& intersect, glm::mat4 modelMatrix)
+__device__ bool setIntersection(double& tMax, Intersect& intersect, Intersect& objectSpaceIntersect, glm::mat4 modelMatrix, const Ray& ray)
 {
-	if (intersect.m_t < tMax)
+	// convert point of intersection into world space
+	glm::vec3 worldPOI = modelMatrix * glm::vec4(intersect.m_intersectionPoint, 1.0f);
+	double distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
+	if (distanceOfPOI < tMax)
 	{
-		intersect.m_normal = modelMatrix * glm::vec4(intersect.m_normal, 0.f);
-		tMax = intersect.m_t;
+		intersect.m_normal = glm::inverse(glm::transpose(modelMatrix)) * glm::vec4(objectSpaceIntersect.m_normal, 0.f);
+		intersect.m_intersectionPoint = worldPOI;
+		intersect.m_t = distanceOfPOI;
 		intersect.m_hit = true;
+		tMax = distanceOfPOI;
+		return true;
 	}
+	return false;
 }
 
 __device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigned int raytracableObjects)
 {
+	// This is the global intersect that stores the intersect info in world space
 	Intersect intersect;
 
 	// loop through all geometries, find the smallest "t" value for a single ray
@@ -90,35 +131,41 @@ __device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigne
 	{
 		Geometry geometry = geometries[i];
 
-		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f));
+		// Generate the ray in the object space of the geometry being intersected.
+		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), glm::normalize(geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f)));
 
-		int tMax = INFINITY;
+		double tMax = INFINITY;
+		// This intersect is re-created each iteration and stores the intersect info in object space of the geometry
+		Intersect objectSpaceIntersect;
 
 		switch (geometry.m_geometryType)
 		{
-		case GeometryType::TRIANGLEMESH:
-			for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
-			{
-				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, intersect))
+			case GeometryType::TRIANGLEMESH:
+				for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
 				{
-					setIntersection(tMax, intersect, geometry.m_modelMatrix);
-					intersect.geometryIndex = i;
-					intersect.triangleIndex = j;
+
+					if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
+					{
+						if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+							intersect.geometryIndex = i;
+							intersect.triangleIndex = j;
+						}
+					}
 				}
-			}
-			break;
-		case GeometryType::PLANE:
-			if (intersectPlane(geometry, objectSpaceRay, intersect))
-			{
-				setIntersection(tMax, intersect, geometry.m_modelMatrix);
-				intersect.geometryIndex = i;
-			}
-			break;
-		case GeometryType::SPHERE:
-			break;
-		default:
-			printf("No such Geometry implemented yet!");
-			break;
+				break;
+			case GeometryType::PLANE:
+				if (intersectPlane(geometry, objectSpaceRay, intersect))
+				{
+					if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+						intersect.geometryIndex = i;
+					}
+				}
+				break;
+			case GeometryType::SPHERE:
+				break;
+			default:
+				printf("No such Geometry implemented yet!");
+				break;
 		}
 	}
 	return intersect;
@@ -129,7 +176,7 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 	Geometry hitGeometry = geometries[intersect.geometryIndex];
 
 	Ray& objectSpaceRay = Ray(hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_origin, 1.f), hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_direction, 0.f));
-	return hitGeometry.m_bxdf->bsdf(-objectSpaceRay.m_direction, intersect.m_normal, outgoingRayDirection, intersect);
+	return glm::abs(intersect.m_normal);// hitGeometry.m_bxdf->bsdf(-objectSpaceRay.m_direction, intersect.m_normal, outgoingRayDirection, intersect);
 }
 
 __device__ void generateRays(Camera* camera, Geometry* geometries, glm::vec3* pixels, unsigned int raytracableObjects)
@@ -153,12 +200,6 @@ __device__ void generateRays(Camera* camera, Geometry* geometries, glm::vec3* pi
 
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 
-
-	if (pixelIndex >= pixelSize)
-	{
-		return;
-	}
-
 	Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
 
 	if (intersect.m_hit)
@@ -167,7 +208,6 @@ __device__ void generateRays(Camera* camera, Geometry* geometries, glm::vec3* pi
 		outgoingRay.m_origin = intersect.m_intersectionPoint;
 		pixels[pixelIndex] = shade(ray, intersect, outgoingRay.m_direction, geometries);
 	}
-
 }
 
 __global__ void launchPathTrace(PathTracerState* state)
@@ -183,7 +223,7 @@ int main()
 
 	std::vector<Triangle> trianglesInMesh;
 	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 180.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	Geometry* planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -7.f, 0.f), glm::vec3(45.f, 0.f, 0.f), glm::vec3(5.f));
 
@@ -211,14 +251,12 @@ int main()
 	int samplesPerPixel = 1;
 
 	// First we will copy the base geometry object to device memory
-	state->d_geometry = nullptr;
+	//state->d_geometry = nullptr;
 	cudaMalloc((void**)&(state->d_geometry), sizeof(Geometry) * geometries.size());
 	cudaCheckErrors("cudaMalloc geometry fail");
 	cudaMemcpy(state->d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
 	cudaCheckErrors("cudaMemcpy geometry fail");
 	state->d_raytracableObjects = geometries.size();
-
-	
 
 	// Now we will save the internal triangle data to device memory
 	for (int i = 0; i < geometries.size(); ++i)
@@ -243,7 +281,6 @@ int main()
 			cudaCheckErrors("cudaMemcpy device triangle data fail");
 		}
 	}
-	
 
 	state->d_raysToTrace = 0;
 	cudaMalloc((void**)&(state->d_raysToTrace), cameraResolution * samplesPerPixel * sizeof(unsigned int));
@@ -295,7 +332,7 @@ int main()
 		
 		cudaMemcpy(state->d_pixels, pixels, cameraResolution * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 		cudaCheckErrors("cudaMemcpy pixels to device fail");
-		launchPathTrace << < gridSize, blockSize >> > (state);
+		launchPathTrace <<< gridSize, blockSize >>> (state);
 		cudaDeviceSynchronize();
 		cudaMemcpy(pixels, state->d_pixels, sizeof(glm::vec3) * cameraResolution, cudaMemcpyDeviceToHost);
 		cudaCheckErrors("cudaMemcpy pixels to host fail");
