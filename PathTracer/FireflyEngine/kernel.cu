@@ -121,10 +121,9 @@ __device__ bool setIntersection(double& tMax, Intersect& intersect, Intersect& o
 	return false;
 }
 
-__device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigned int raytracableObjects)
+__device__ bool intersectRays(Intersect* intersect, const Ray& ray, Geometry* geometries, unsigned int raytracableObjects)
 {
 	// This is the global intersect that stores the intersect info in world space
-	Intersect intersect;
 
 	// loop through all geometries, find the smallest "t" value for a single ray
 	for (int i = 0; i < raytracableObjects; ++i)
@@ -145,19 +144,19 @@ __device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigne
 
 				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
 				{
-					if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-						intersect.geometryIndex = i;
-						intersect.triangleIndex = j;
+					if (setIntersection(tMax, *intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+						intersect->geometryIndex = i;
+						intersect->triangleIndex = j;
 					}
 				}
 			}
 		}
 		else if (geometry.m_geometryType == GeometryType::PLANE)
 		{
-			if (intersectPlane(geometry, objectSpaceRay, intersect))
+			if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
 			{
-				if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-					intersect.geometryIndex = i;
+				if (setIntersection(tMax, *intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+					intersect->geometryIndex = i;
 				}
 			}
 		}
@@ -170,7 +169,7 @@ __device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigne
 			printf("No such Geometry implemented yet!");
 		}
 	}
-	return intersect;
+	return intersect->m_hit;
 }
 
 __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
@@ -202,15 +201,16 @@ __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, u
 
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 
-	Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
+	Intersect *intersect = new Intersect;
 
-	if (intersect.m_hit)
+	if (intersectRays(intersect, ray, geometries, raytracableObjects))
 	{
 		Ray outgoingRay;
-		outgoingRay.m_origin = intersect.m_intersectionPoint;
-		glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
+		outgoingRay.m_origin = intersect->m_intersectionPoint;
+		glm::vec3 pixelColor = shade(ray, *intersect, outgoingRay.m_direction, geometries);
 		pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
 	}
+	delete intersect;
 }
 
 __global__ void launchPathTrace(uchar3* pbo, PathTracerState* state, Camera camera)
