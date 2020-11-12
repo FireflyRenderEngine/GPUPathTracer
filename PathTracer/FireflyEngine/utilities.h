@@ -38,14 +38,6 @@
 
 // ------------------DATA CONTAINER STRUCTS------------------
 
-void cleanCUDAMemory(PathTracerState* state)
-{
-	//cudaFree(state->d_camera);
-	cudaFree(state->d_geometry);
-	//cudaFree(state->d_pixels);
-	cudaFree(state);
-}
-
 __device__ bool isZero(const glm::vec3& v)
 {
 	return v.x == 0 && v.y == 0 && v.z == 0;
@@ -433,7 +425,7 @@ struct Camera
 		UpdateBasisAxis();
 	}
 };
-static void pxl_glfw_error_callback(int error, const char* description)
+static void glfw_error_callback(int error, const char* description)
 {
 	fputs(description, stderr);
 }
@@ -444,7 +436,7 @@ struct GLFWViewer
 	GLFWViewer(int windowWidth, int windowHeight, glm::vec3* pixels)
 		: m_windowWidth(windowWidth), m_windowHeight(windowHeight), m_pixels(pixels)
 	{
-		glfwSetErrorCallback(pxl_glfw_error_callback);
+		glfwSetErrorCallback(glfw_error_callback);
 		// Init the viewer
 		if (!glfwInit())
 			exit(EXIT_FAILURE);
@@ -476,13 +468,6 @@ struct GLFWViewer
 
 		// ignore vsync for now
 		glfwSwapInterval(0);
-
-		// only copy r/g/b
-		//glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
-		//
-		//glViewport(0, 0, m_windowWidth, m_windowHeight);
-		//glfwSetFramebufferSizeCallback(m_window, framebuffer_size_callback);
-		
 	}
 
 	void InitCUDA()

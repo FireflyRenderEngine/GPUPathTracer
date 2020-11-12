@@ -107,27 +107,28 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	}
 }
 
-__device__ bool setIntersection(double& tMax, Intersect& intersect, Intersect& objectSpaceIntersect, glm::mat4 modelMatrix, const Ray& ray)
+__device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 modelMatrix, const Ray& ray)
 {
 	// convert point of intersection into world space
-	glm::vec3 worldPOI = modelMatrix * glm::vec4(intersect.m_intersectionPoint, 1.0f);
-	double distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
+	glm::vec3 worldPOI = modelMatrix * glm::vec4(objectSpaceIntersect.m_intersectionPoint, 1.0f);
+	float distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
 	if (distanceOfPOI < tMax)
 	{
-		intersect.m_normal = glm::inverse(glm::transpose(modelMatrix)) * glm::vec4(objectSpaceIntersect.m_normal, 0.f);
-		intersect.m_intersectionPoint = worldPOI;
-		intersect.m_t = distanceOfPOI;
-		intersect.m_hit = true;
+		intersectOut.m_normal = glm::inverse(glm::transpose(modelMatrix)) * glm::vec4(objectSpaceIntersect.m_normal, 0.f);
+		intersectOut.m_intersectionPoint = worldPOI;
+		intersectOut.m_t = distanceOfPOI;
+		intersectOut.m_hit = true;
 		tMax = distanceOfPOI;
 		return true;
 	}
 	return false;
 }
 
-__device__ bool intersectRays(Intersect* intersect, const Ray& ray, Geometry* geometries, unsigned int raytracableObjects)
+__device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsigned int raytracableObjects)
 {
 	// This is the global intersect that stores the intersect info in world space
-
+	Intersect intersectOut;
+	float tMax = INFINITY;
 	// loop through all geometries, find the smallest "t" value for a single ray
 	for (int i = 0; i < raytracableObjects; ++i)
 	{
@@ -136,7 +137,6 @@ __device__ bool intersectRays(Intersect* intersect, const Ray& ray, Geometry* ge
 		// Generate the ray in the object space of the geometry being intersected.
 		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), glm::normalize(geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f)));
 
-		double tMax = INFINITY;
 		// This intersect is re-created each iteration and stores the intersect info in object space of the geometry
 		Intersect objectSpaceIntersect;
 
@@ -147,9 +147,9 @@ __device__ bool intersectRays(Intersect* intersect, const Ray& ray, Geometry* ge
 
 				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
 				{
-					if (setIntersection(tMax, *intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-						intersect->geometryIndex = i;
-						intersect->triangleIndex = j;
+					if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+						intersectOut.geometryIndex = i;
+						intersectOut.triangleIndex = j;
 					}
 				}
 			}
@@ -158,8 +158,8 @@ __device__ bool intersectRays(Intersect* intersect, const Ray& ray, Geometry* ge
 		{
 			if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
 			{
-				if (setIntersection(tMax, *intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-					intersect->geometryIndex = i;
+				if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+					intersectOut.geometryIndex = i;
 				}
 			}
 		}
@@ -172,7 +172,7 @@ __device__ bool intersectRays(Intersect* intersect, const Ray& ray, Geometry* ge
 			printf("No such Geometry implemented yet!");
 		}
 	}
-	return intersect->m_hit;
+	return intersectOut;
 }
 
 __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
@@ -185,8 +185,8 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 
 __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, unsigned int raytracableObjects)
 {
-	int x = 316;// blockIdx.x* blockDim.x + threadIdx.x;
-	int y = 313;// blockIdx.y* blockDim.y + threadIdx.y;
+	int x = blockIdx.x* blockDim.x + threadIdx.x;
+	int y = blockIdx.y* blockDim.y + threadIdx.y;
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
 
@@ -204,54 +204,7 @@ __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, u
 
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 
-	Intersect intersect;
-	double tMax = INFINITY;
-
-	// Check for intersection with geometries
-	// loop through all geometries, find the smallest "t" value for a single ray
-	for (int i = 0; i < raytracableObjects; ++i)
-	{
-		Geometry& geometry = geometries[i];
-
-		// Generate the ray in the object space of the geometry being intersected.
-		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), glm::normalize(geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f)));
-
-		// This intersect is re-created each iteration and stores the intersect info in object space of the geometry
-		Intersect objectSpaceIntersect;
-
-		if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
-		{
-			for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
-			{
-
-				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
-				{
-					if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-						intersect.geometryIndex = i;
-						intersect.triangleIndex = j;
-					}
-				}
-			}
-		}
-		else if (geometry.m_geometryType == GeometryType::PLANE)
-		{
-			bool status = intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect);
-			if (status)
-			{
-				if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-					intersect.geometryIndex = i;
-				}
-			}
-		}
-		else if (geometry.m_geometryType == GeometryType::SPHERE)
-		{
-			printf("Sphere Geometry implemented yet!");
-		}
-		else
-		{
-			printf("No such Geometry implemented yet!");
-		}
-	}
+	Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
 
 	if (intersect.m_hit)
 	{
@@ -262,16 +215,14 @@ __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, u
 	}
 }
 
-__global__ void launchPathTrace(uchar3* pbo, PathTracerState* state, Camera camera, int numberOfGeometries)
+__global__ void launchPathTrace(uchar3* pbo, Geometry* geometries, Camera camera, int numberOfGeometries)
 {
-	generateRays(pbo, camera, state->d_geometry, numberOfGeometries);
+	generateRays(pbo, camera, geometries, numberOfGeometries);
 }
 
 int main()
 {
-	PathTracerState* state;
-
-	cudaMallocManaged((void**)&state, sizeof(PathTracerState));
+	PathTracerState state;
 
 	std::vector<Triangle> trianglesInMesh;
 	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
@@ -315,12 +266,12 @@ int main()
 	int samplesPerPixel = 1;
 
 	// First we will copy the base geometry object to device memory
-	state->d_geometry = nullptr;
-	cudaMalloc((void**)&(state->d_geometry), sizeof(Geometry) * geometries.size());
+	state.d_geometry = nullptr;
+	cudaMalloc((void**)&(state.d_geometry), sizeof(Geometry) * geometries.size());
 	cudaCheckErrors("cudaMalloc geometry fail");
-	cudaMemcpy(state->d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
+	cudaMemcpy(state.d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
 	cudaCheckErrors("cudaMemcpy geometry fail");
-	state->d_raytracableObjects = geometries.size();
+	state.d_raytracableObjects = geometries.size();
 
 	// Now we will save the internal triangle data to device memory
 	for (int i = 0; i < geometries.size(); ++i)
@@ -330,7 +281,7 @@ int main()
 		cudaCheckErrors("cudaMalloc host bxdf data fail");
 		cudaMemcpy(hostBXDFData, geometries[i].m_bxdf, sizeof(BXDF), cudaMemcpyHostToDevice);
 		cudaCheckErrors("cudaMemcpy host bxdf data fail");
-		cudaMemcpy(&(state->d_geometry[i].m_bxdf), &hostBXDFData, sizeof(BXDF*), cudaMemcpyHostToDevice);
+		cudaMemcpy(&(state.d_geometry[i].m_bxdf), &hostBXDFData, sizeof(BXDF*), cudaMemcpyHostToDevice);
 		cudaCheckErrors("cudaMemcpy device bxdf data fail");
 
 		if (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH)
@@ -341,22 +292,16 @@ int main()
 			cudaCheckErrors("cudaMalloc host triangle data fail");
 			cudaMemcpy(hostTriangleData, geometries[i].m_triangles, sizeof(Triangle) * geometries[i].m_numberOfTriangles, cudaMemcpyHostToDevice);
 			cudaCheckErrors("cudaMemcpy host triangle data fail");
-			cudaMemcpy(&(state->d_geometry[i].m_triangles), &hostTriangleData, sizeof(Triangle*), cudaMemcpyHostToDevice);
+			cudaMemcpy(&(state.d_geometry[i].m_triangles), &hostTriangleData, sizeof(Triangle*), cudaMemcpyHostToDevice);
 			cudaCheckErrors("cudaMemcpy device triangle data fail");
 		}
 	}
 
-	state->d_raysToTrace = 0;
-	cudaMalloc((void**)&(state->d_raysToTrace), cameraResolution * samplesPerPixel * sizeof(unsigned int));
+	state.d_raysToTrace = 0;
+	cudaMalloc((void**)&(state.d_raysToTrace), cameraResolution * samplesPerPixel * sizeof(unsigned int));
 	cudaCheckErrors("cudaMalloc rays fail");
 
 	glm::vec3* pixels = new glm::vec3[cameraResolution];
-
-	//state->d_pixels = nullptr;
-	//cudaMalloc((void**)&(state->d_pixels), cameraResolution * sizeof(glm::vec3));
-	//cudaCheckErrors("cudaMalloc pixels fail");
-	//cudaMemcpy(state->d_pixels, pixels, cameraResolution * sizeof(glm::vec3), cudaMemcpyHostToDevice);
-	//cudaCheckErrors("cudaMemcpy pixels fail");
 
 	dim3 blockSize(16, 16, 1);
 	dim3 gridSize;
@@ -379,8 +324,8 @@ int main()
 	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
 	viewer->Create();
 
-	state->d_camera = nullptr;
-	cudaMalloc((void**)&(state->d_camera), sizeof(Camera));
+	state.d_camera = nullptr;
+	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
 	while (!glfwWindowShouldClose(viewer->m_window))
@@ -394,7 +339,7 @@ int main()
 		cudaGraphicsResourceGetMappedPointer((void**)&pbo_dptr, &num_bytes, pboResource);
 		cudaMemset(pbo_dptr, 0, num_bytes);
 		{
-			launchPathTrace << < 1,1/*gridSize, blockSize*/ >> > (pbo_dptr, state, camera, geometries.size());
+			launchPathTrace << < /*1,1*/gridSize, blockSize >> > (pbo_dptr, state.d_geometry, camera, geometries.size());
 		}
 		cudaGraphicsUnmapResources(1, &pboResource, 0);
 
@@ -413,7 +358,10 @@ int main()
 		glfwPollEvents();
 	}
 
-	cleanCUDAMemory(state);
+	glfwDestroyWindow(viewer->m_window);
+	glfwTerminate();
+
+	cudaFree(state.d_geometry);
 	delete[] pixels;
 	delete viewer;
 	delete triangleMeshGeometry;
