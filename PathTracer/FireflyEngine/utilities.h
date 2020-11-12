@@ -292,8 +292,8 @@ struct Camera
 	float m_nearClip;
 	float m_farClip;
 	// Camera options
-	float m_cameraMovementSpeed = 0.8f;
-	float m_cameraMouseSensitivity = 0.8f;
+	float m_cameraMovementSpeed = 0.2f;
+	float m_cameraMouseSensitivity = 0.2f;
 	bool m_cameraFirstMouseInput = false;
 	float m_xDelta = 0.f;
 	float m_yDelta = 0.f;
@@ -365,22 +365,22 @@ struct Camera
 			m_position -= m_up * velocity;
 		if (direction == 6) // YAWLEFT
 		{
-			m_yaw -= 1.0f;
+			m_yaw -= 0.5f;
 			UpdateBasisAxis();
 		}
 		if (direction == 7) // YAWRIGHT
 		{
-			m_yaw += 1.0f;
+			m_yaw += 0.5f;
 			UpdateBasisAxis();
 		}
 		if (direction == 8) // PITCHUP
 		{
-			m_pitch += 1.0f;
+			m_pitch += 0.5f;
 			UpdateBasisAxis();
 		}
 		if (direction == 9) // PITCHDOWN
 		{
-			m_pitch -= 1.0f;
+			m_pitch -= 0.5f;
 			UpdateBasisAxis();
 		}
 		if (direction == 10) // PITCHDOWN
@@ -433,16 +433,29 @@ struct Camera
 		UpdateBasisAxis();
 	}
 };
+static void pxl_glfw_error_callback(int error, const char* description)
+{
+	fputs(description, stderr);
+}
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-struct GLFWViewer {
+struct GLFWViewer 
+{
 	GLFWViewer(int windowWidth, int windowHeight, glm::vec3* pixels)
 		: m_windowWidth(windowWidth), m_windowHeight(windowHeight), m_pixels(pixels)
 	{
+		glfwSetErrorCallback(pxl_glfw_error_callback);
 		// Init the viewer
-		glfwInit();
+		if (!glfwInit())
+			exit(EXIT_FAILURE);
+
+		glfwWindowHint(GLFW_DEPTH_BITS, 0);
+		glfwWindowHint(GLFW_STENCIL_BITS, 0);
+
+		glfwWindowHint(GLFW_SRGB_CAPABLE, GL_TRUE);
+
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 		m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Viewer", NULL, NULL);
@@ -450,6 +463,7 @@ struct GLFWViewer {
 		{
 			std::cout << "Failed to create GLFW window" << std::endl;
 			glfwTerminate();
+			exit(EXIT_FAILURE);
 			return;
 		}
 		glfwMakeContextCurrent(m_window);
@@ -460,8 +474,72 @@ struct GLFWViewer {
 			return;
 		}
 
-		glViewport(0, 0, m_windowWidth, m_windowHeight);
-		glfwSetFramebufferSizeCallback(m_window, framebuffer_size_callback);
+		// ignore vsync for now
+		glfwSwapInterval(0);
+
+		// only copy r/g/b
+		//glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+		//
+		//glViewport(0, 0, m_windowWidth, m_windowHeight);
+		//glfwSetFramebufferSizeCallback(m_window, framebuffer_size_callback);
+		
+	}
+
+	void InitCUDA()
+	{
+		cudaError_t cuda_err;
+
+		int gl_device_id;
+		unsigned int gl_device_count;
+		cuda_err = (cudaGLGetDevices(&gl_device_count, &gl_device_id, 1, cudaGLDeviceListAll));
+
+		int cuda_device_id = gl_device_id;
+		cuda_err = (cudaSetDevice(cuda_device_id));
+
+		//
+		// MULTI-GPU?
+		//
+		const bool multi_gpu = gl_device_id != cuda_device_id;
+
+		//
+		// INFO
+		//
+		struct cudaDeviceProp props;
+
+		cuda_err = (cudaGetDeviceProperties(&props, gl_device_id));
+		printf("GL   : %-24s (%2d)\n", props.name, props.multiProcessorCount);
+
+		cuda_err = (cudaGetDeviceProperties(&props, cuda_device_id));
+		printf("CUDA : %-24s (%2d)\n", props.name, props.multiProcessorCount);
+
+		//
+		// CREATE CUDA STREAM & EVENT
+		//
+		cudaStream_t stream;
+		cudaEvent_t  event;
+
+		cuda_err = (cudaStreamCreateWithFlags(&stream, cudaStreamDefault));   // optionally ignore default stream behavior
+		cuda_err = (cudaEventCreateWithFlags(&event, cudaEventBlockingSync)); // | cudaEventDisableTiming);
+
+	}
+	
+	void cleanupCuda()
+	{
+		if (pbo)
+		{
+			// unregister this buffer object with CUDA
+			cudaGraphicsUnregisterResource(pboCudaResource);
+
+			glBindBuffer(GL_ARRAY_BUFFER, pbo);
+			glDeleteBuffers(1, &pbo);
+
+			pbo = (GLuint)NULL;
+		}
+		if (m_texColorBuffer)
+		{
+			glDeleteTextures(1, &m_texColorBuffer);
+			m_texColorBuffer = (GLuint)NULL;
+		}
 	}
 
 	void Create() 
@@ -535,7 +613,25 @@ struct GLFWViewer {
 		glBindVertexArray(m_VAO);
 		// Bind the texture
 		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
+		//cudaGraphicsGLRegisterImage(&viewCudaResource, m_texColorBuffer, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
 		//cudaGraphicsGLRegisterImage(&g_CUDAGraphicsResource[0], m_texColorBuffer, GL_TEXTURE_2D, cudaGraphicsMapFlagsWriteDiscard);
+
+		// set up vertex data parameter
+		int num_texels = m_windowWidth * m_windowHeight;
+		int num_values = num_texels * 3;
+		int size_tex_data = sizeof(char) * num_values;
+
+		// Generate a buffer ID called a PBO (Pixel Buffer Object)
+		glGenBuffers(1, &pbo);
+
+		// Make this the current UNPACK buffer (OpenGL is state-based)
+		glBindBuffer(GL_ARRAY_BUFFER, pbo);
+
+		// Allocate data for the buffer. 4-channel 8-bit image
+		glBufferData(GL_ARRAY_BUFFER, size_tex_data, NULL, GL_DYNAMIC_COPY);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		cudaGraphicsGLRegisterBuffer(&pboCudaResource, pbo, cudaGraphicsRegisterFlagsWriteDiscard);
+		glActiveTexture(GL_TEXTURE0);
 	}
 
 	std::string GetShaderCode(std::string filePath)
@@ -640,13 +736,29 @@ struct GLFWViewer {
 		glDeleteShader(fragmentShader);
 	}
 
+	cudaGraphicsResource_t getPBOResource() const
+	{
+		return pboCudaResource;
+	}
+
+	GLuint getPBO() const
+	{
+		return pbo;
+	}
+
+	GLuint getTexture() const
+	{
+		return m_texColorBuffer;
+	}
+
 	void Draw() 
 	{
 		// Update the texture
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, m_pixels);
+		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, m_pixels);
 
 		// Draw the Quad
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+		//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 	}
 
 	~GLFWViewer() 
@@ -661,6 +773,9 @@ struct GLFWViewer {
 	unsigned int m_VAO;
 	unsigned int m_quadShaderProgram;
 	GLuint m_texColorBuffer;
+	GLuint pbo;
+
+	cudaGraphicsResource_t pboCudaResource;
 
 	// This is the quad on the screen that will be used for showing the path traced image
 	int m_windowWidth, m_windowHeight;
@@ -760,34 +875,34 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window, Camera* camera, glm::vec3* pixels)
+void processInput(GLFWwindow* window, Camera& camera, glm::vec3* pixels)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		camera->ProcessKeyboard(0);
+		camera.ProcessKeyboard(0);
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-		camera->ProcessKeyboard(1);
+		camera.ProcessKeyboard(1);
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		camera->ProcessKeyboard(2);
+		camera.ProcessKeyboard(2);
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-		camera->ProcessKeyboard(3);
+		camera.ProcessKeyboard(3);
 	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-		camera->ProcessKeyboard(4);
+		camera.ProcessKeyboard(4);
 	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-		camera->ProcessKeyboard(5);
+		camera.ProcessKeyboard(5);
 	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-		camera->ProcessKeyboard(6);
+		camera.ProcessKeyboard(6);
 	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-		camera->ProcessKeyboard(7);
+		camera.ProcessKeyboard(7);
 	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-		camera->ProcessKeyboard(8);
+		camera.ProcessKeyboard(8);
 	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-		camera->ProcessKeyboard(9);
+		camera.ProcessKeyboard(9);
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-		camera->ProcessKeyboard(10);
+		camera.ProcessKeyboard(10);
 	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
-		saveToPPM(pixels, camera->m_screenHeight, camera->m_screenWidth);
+		saveToPPM(pixels, camera.m_screenHeight, camera.m_screenWidth);
 	}
 }

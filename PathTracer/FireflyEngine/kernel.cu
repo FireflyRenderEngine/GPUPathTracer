@@ -23,7 +23,7 @@ __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect&
 		intersect.m_intersectionPoint = P;
 		intersect.m_normal = plane.m_normal;
 	
-		return (intersect.m_t >= 0);
+		return (intersect.m_t > 0);
 	}
 	return false;
 }
@@ -129,7 +129,7 @@ __device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigne
 	// loop through all geometries, find the smallest "t" value for a single ray
 	for (int i = 0; i < raytracableObjects; ++i)
 	{
-		Geometry geometry = geometries[i];
+		Geometry& geometry = geometries[i];
 
 		// Generate the ray in the object space of the geometry being intersected.
 		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), glm::normalize(geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f)));
@@ -138,34 +138,36 @@ __device__ Intersect intersectRays(const Ray& ray, Geometry* geometries, unsigne
 		// This intersect is re-created each iteration and stores the intersect info in object space of the geometry
 		Intersect objectSpaceIntersect;
 
-		switch (geometry.m_geometryType)
+		if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
 		{
-			case GeometryType::TRIANGLEMESH:
-				for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
-				{
+			for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
+			{
 
-					if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
-					{
-						if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
-							intersect.geometryIndex = i;
-							intersect.triangleIndex = j;
-						}
-					}
-				}
-				break;
-			case GeometryType::PLANE:
-				if (intersectPlane(geometry, objectSpaceRay, intersect))
+				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
 				{
 					if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
 						intersect.geometryIndex = i;
+						intersect.triangleIndex = j;
 					}
 				}
-				break;
-			case GeometryType::SPHERE:
-				break;
-			default:
-				printf("No such Geometry implemented yet!");
-				break;
+			}
+		}
+		else if (geometry.m_geometryType == GeometryType::PLANE)
+		{
+			if (intersectPlane(geometry, objectSpaceRay, intersect))
+			{
+				if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+					intersect.geometryIndex = i;
+				}
+			}
+		}
+		else if (geometry.m_geometryType == GeometryType::SPHERE)
+		{
+			printf("Sphere Geometry implemented yet!");
+		}
+		else
+		{
+			printf("No such Geometry implemented yet!");
 		}
 	}
 	return intersect;
@@ -179,24 +181,24 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 	return glm::abs(intersect.m_normal);// hitGeometry.m_bxdf->bsdf(-objectSpaceRay.m_direction, intersect.m_normal, outgoingRayDirection, intersect);
 }
 
-__device__ void generateRays(Camera* camera, Geometry* geometries, glm::vec3* pixels, unsigned int raytracableObjects)
+__device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, unsigned int raytracableObjects)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
-	int pixelSize = camera->m_screenHeight * camera->m_screenWidth;
-	int pixelIndex = y * camera->m_screenWidth + x;
+	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
+	int pixelIndex = y * camera.m_screenWidth + x;
 
 	if (pixelIndex >= pixelSize)
 	{
 		return;
 	}
 	Ray ray;
-	ray.m_origin = camera->m_position;
+	ray.m_origin = camera.m_position;
 
-	float Px = (x / camera->m_screenWidth) * 2.f - 1.f;
-	float Py = 1.f - (y / camera->m_screenHeight) * 2.f;
+	float Px = (x / camera.m_screenWidth) * 2.f - 1.f;
+	float Py = 1.f - (y / camera.m_screenHeight) * 2.f;
 
-	glm::vec3 wLookAtPoint = camera->GetInverseViewMatrix() * camera->GetInverseProjectionMatrix() * (glm::vec4(Px, Py, 1.f, 1.f) * camera->m_farClip);
+	glm::vec3 wLookAtPoint = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix() * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
 
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 
@@ -206,13 +208,14 @@ __device__ void generateRays(Camera* camera, Geometry* geometries, glm::vec3* pi
 	{
 		Ray outgoingRay;
 		outgoingRay.m_origin = intersect.m_intersectionPoint;
-		pixels[pixelIndex] = shade(ray, intersect, outgoingRay.m_direction, geometries);
+		glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
+		pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
 	}
 }
 
-__global__ void launchPathTrace(PathTracerState* state)
+__global__ void launchPathTrace(uchar3* pbo, PathTracerState* state, Camera camera)
 {
-	generateRays(state->d_camera, state->d_geometry, state->d_pixels, state->d_raytracableObjects);
+	generateRays(pbo, camera, state->d_geometry, state->d_raytracableObjects);
 }
 
 int main()
@@ -225,7 +228,11 @@ int main()
 	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
 	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
-	Geometry* planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -7.f, 0.f), glm::vec3(45.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry*  planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, 2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry* planeLightGeometry2 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry* planeLightGeometry3 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
+
 
 	BXDF* diffusebxdfMesh = new BXDF();
 	diffusebxdfMesh->m_type = BXDFTyp::DIFFUSE;
@@ -237,11 +244,17 @@ int main()
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry->m_bxdf = lightbxdfPlane;
+	planeLightGeometry->m_bxdf = diffusebxdfMesh;
+	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
+	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
+	planeLightGeometry3->m_bxdf = diffusebxdfMesh;
 
 	std::vector<Geometry> geometries;
-	geometries.push_back(*triangleMeshGeometry);
+	//geometries.push_back(*triangleMeshGeometry);
 	geometries.push_back(*planeLightGeometry);
+	geometries.push_back(*planeLightGeometry1);
+	geometries.push_back(*planeLightGeometry2);
+	geometries.push_back(*planeLightGeometry3);
 
 	// TODO: Load scene from file
 	int windowWidth  = 800;
@@ -251,7 +264,7 @@ int main()
 	int samplesPerPixel = 1;
 
 	// First we will copy the base geometry object to device memory
-	//state->d_geometry = nullptr;
+	state->d_geometry = nullptr;
 	cudaMalloc((void**)&(state->d_geometry), sizeof(Geometry) * geometries.size());
 	cudaCheckErrors("cudaMalloc geometry fail");
 	cudaMemcpy(state->d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
@@ -299,18 +312,18 @@ int main()
 	gridSize.x = (windowWidth / blockSize.x);// +1;
 	gridSize.y = (windowHeight / blockSize.y);// +1;
 
-	Camera* camera = new Camera();
-	camera->m_position = glm::vec3(0.f, 0.f, 15.f);
-	camera->m_forward = glm::vec3(0.f, 0.f, -1.f);
-	camera->m_worldUp = glm::vec3(0.f, 1.f, 0.f);
-	camera->m_fov = 70.f;
-	camera->m_screenHeight = float(windowWidth);
-	camera->m_screenWidth = float(windowHeight);
-	camera->m_nearClip = 0.1f;
-	camera->m_farClip = 1000.f;
-	camera->m_pitch = 0.f;
-	camera->m_yaw = -90.f;
-	camera->UpdateBasisAxis();
+	Camera camera;
+	camera.m_position = glm::vec3(0.f, 0.f, 15.f);
+	camera.m_forward = glm::vec3(0.f, 0.f, -1.f);
+	camera.m_worldUp = glm::vec3(0.f, 1.f, 0.f);
+	camera.m_fov = 70.f;
+	camera.m_screenHeight = float(windowWidth);
+	camera.m_screenWidth = float(windowHeight);
+	camera.m_nearClip = 0.1f;
+	camera.m_farClip = 1000.f;
+	camera.m_pitch = 0.f;
+	camera.m_yaw = -90.f;
+	camera.UpdateBasisAxis();
 
 	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
 	viewer->Create();
@@ -322,26 +335,29 @@ int main()
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
 		processInput(viewer->m_window, camera, pixels);
-		cudaMemcpy(state->d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
-		cudaCheckErrors("cudaMemcpy camera data fail");
-		// Initialize all the pixels with a base color of white
-		for (int i = 0; i < cameraResolution; ++i)
-		{
-			pixels[i] = glm::vec3(1.f, 0.75f, 0.79f);
-		}
-		
-		cudaMemcpy(state->d_pixels, pixels, cameraResolution * sizeof(glm::vec3), cudaMemcpyHostToDevice);
-		cudaCheckErrors("cudaMemcpy pixels to device fail");
-		launchPathTrace <<< gridSize, blockSize >>> (state);
-		cudaDeviceSynchronize();
-		cudaMemcpy(pixels, state->d_pixels, sizeof(glm::vec3) * cameraResolution, cudaMemcpyDeviceToHost);
-		cudaCheckErrors("cudaMemcpy pixels to host fail");
 
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		uchar3* pbo_dptr = NULL;
+		size_t num_bytes;
+		cudaGraphicsResource* pboResource = (viewer->getPBOResource());
+		cudaGraphicsMapResources(1, &pboResource, 0);
+		cudaGraphicsResourceGetMappedPointer((void**)&pbo_dptr, &num_bytes, pboResource);
+		cudaMemset(pbo_dptr, 0, num_bytes);
+		{
+			launchPathTrace << < gridSize, blockSize >> > (pbo_dptr, state, camera);
+		}
+		cudaGraphicsUnmapResources(1, &pboResource, 0);
+
+		std::string title = "Firefly";
+		glfwSetWindowTitle(viewer->m_window, title.c_str());
+
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, viewer->getPBO());
+		glBindTexture(GL_TEXTURE_2D, viewer->getTexture());
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, windowWidth, windowHeight, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+		glClearColor(0.0f, 0.f, 0.f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		viewer->Draw();
-
 		glfwSwapBuffers(viewer->m_window);
 		glfwPollEvents();
 	}
