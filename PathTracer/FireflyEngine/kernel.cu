@@ -182,8 +182,8 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 
 __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, unsigned int raytracableObjects)
 {
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
+	int x = blockIdx.x* blockDim.x + threadIdx.x;
+	int y = blockIdx.y* blockDim.y + threadIdx.y;
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
 
@@ -201,21 +201,66 @@ __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, u
 
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 
-	Intersect *intersect = new Intersect;
+	Intersect intersect;
+	double tMax = INFINITY;
 
-	if (intersectRays(intersect, ray, geometries, raytracableObjects))
+	// Check for intersection with geometries
+	// loop through all geometries, find the smallest "t" value for a single ray
+	for (int i = 0; i < raytracableObjects; ++i)
+	{
+		Geometry& geometry = geometries[i];
+
+		// Generate the ray in the object space of the geometry being intersected.
+		Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), glm::normalize(geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f)));
+
+		// This intersect is re-created each iteration and stores the intersect info in object space of the geometry
+		Intersect objectSpaceIntersect;
+
+		if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
+		{
+			for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
+			{
+
+				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
+				{
+					if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+						intersect.geometryIndex = i;
+						intersect.triangleIndex = j;
+					}
+				}
+			}
+		}
+		else if (geometry.m_geometryType == GeometryType::PLANE)
+		{
+			if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
+			{
+				if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+					intersect.geometryIndex = i;
+				}
+			}
+		}
+		else if (geometry.m_geometryType == GeometryType::SPHERE)
+		{
+			printf("Sphere Geometry implemented yet!");
+		}
+		else
+		{
+			printf("No such Geometry implemented yet!");
+		}
+	}
+
+	if (intersect.m_hit)
 	{
 		Ray outgoingRay;
-		outgoingRay.m_origin = intersect->m_intersectionPoint;
-		glm::vec3 pixelColor = shade(ray, *intersect, outgoingRay.m_direction, geometries);
+		outgoingRay.m_origin = intersect.m_intersectionPoint;
+		glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
 		pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
 	}
-	delete intersect;
 }
 
-__global__ void launchPathTrace(uchar3* pbo, PathTracerState* state, Camera camera)
+__global__ void launchPathTrace(uchar3* pbo, PathTracerState* state, Camera camera, int numberOfGeometries)
 {
-	generateRays(pbo, camera, state->d_geometry, state->d_raytracableObjects);
+	generateRays(pbo, camera, state->d_geometry, numberOfGeometries);
 }
 
 int main()
@@ -250,7 +295,7 @@ int main()
 	planeLightGeometry3->m_bxdf = diffusebxdfMesh;
 
 	std::vector<Geometry> geometries;
-	//geometries.push_back(*triangleMeshGeometry);
+	geometries.push_back(*triangleMeshGeometry);
 	geometries.push_back(*planeLightGeometry);
 	geometries.push_back(*planeLightGeometry1);
 	geometries.push_back(*planeLightGeometry2);
@@ -301,11 +346,11 @@ int main()
 
 	glm::vec3* pixels = new glm::vec3[cameraResolution];
 
-	state->d_pixels = nullptr;
-	cudaMalloc((void**)&(state->d_pixels), cameraResolution * sizeof(glm::vec3));
-	cudaCheckErrors("cudaMalloc pixels fail");
-	cudaMemcpy(state->d_pixels, pixels, cameraResolution * sizeof(glm::vec3), cudaMemcpyHostToDevice);
-	cudaCheckErrors("cudaMemcpy pixels fail");
+	//state->d_pixels = nullptr;
+	//cudaMalloc((void**)&(state->d_pixels), cameraResolution * sizeof(glm::vec3));
+	//cudaCheckErrors("cudaMalloc pixels fail");
+	//cudaMemcpy(state->d_pixels, pixels, cameraResolution * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	//cudaCheckErrors("cudaMemcpy pixels fail");
 
 	dim3 blockSize(16, 16, 1);
 	dim3 gridSize;
@@ -343,7 +388,7 @@ int main()
 		cudaGraphicsResourceGetMappedPointer((void**)&pbo_dptr, &num_bytes, pboResource);
 		cudaMemset(pbo_dptr, 0, num_bytes);
 		{
-			launchPathTrace << < gridSize, blockSize >> > (pbo_dptr, state, camera);
+			launchPathTrace << < gridSize, blockSize >> > (pbo_dptr, state, camera, geometries.size());
 		}
 		cudaGraphicsUnmapResources(1, &pboResource, 0);
 
@@ -361,7 +406,7 @@ int main()
 		glfwSwapBuffers(viewer->m_window);
 		glfwPollEvents();
 	}
-	
+
 	cleanCUDAMemory(state);
 	delete[] pixels;
 	delete viewer;

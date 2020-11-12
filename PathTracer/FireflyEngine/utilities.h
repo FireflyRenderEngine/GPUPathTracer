@@ -40,9 +40,9 @@
 
 void cleanCUDAMemory(PathTracerState* state)
 {
-	cudaFree(state->d_camera);
+	//cudaFree(state->d_camera);
 	cudaFree(state->d_geometry);
-	cudaFree(state->d_pixels);
+	//cudaFree(state->d_pixels);
 	cudaFree(state);
 }
 
