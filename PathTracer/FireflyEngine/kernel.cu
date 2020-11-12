@@ -19,11 +19,14 @@ __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect&
 		{
 			return false;
 		}
-		intersect.m_t = t;
-		intersect.m_intersectionPoint = P;
-		intersect.m_normal = plane.m_normal;
 	
-		return (intersect.m_t > 0);
+		if (t > 0.0f) {
+			intersect.m_t = t;
+			intersect.m_intersectionPoint = P;
+			intersect.m_normal = plane.m_normal;
+			return true;
+		}
+		return false;
 	}
 	return false;
 }
@@ -182,8 +185,8 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 
 __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, unsigned int raytracableObjects)
 {
-	int x = blockIdx.x* blockDim.x + threadIdx.x;
-	int y = blockIdx.y* blockDim.y + threadIdx.y;
+	int x = 316;// blockIdx.x* blockDim.x + threadIdx.x;
+	int y = 313;// blockIdx.y* blockDim.y + threadIdx.y;
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
 
@@ -232,7 +235,8 @@ __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, u
 		}
 		else if (geometry.m_geometryType == GeometryType::PLANE)
 		{
-			if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
+			bool status = intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect);
+			if (status)
 			{
 				if (setIntersection(tMax, intersect, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
 					intersect.geometryIndex = i;
@@ -277,7 +281,7 @@ int main()
 	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry2 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry3 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
-
+	Geometry* planeLightGeometry4 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.0f, 0.f), glm::vec3(0.f, 25.f, 0.f), glm::vec3(5.f));
 
 	BXDF* diffusebxdfMesh = new BXDF();
 	diffusebxdfMesh->m_type = BXDFTyp::DIFFUSE;
@@ -293,13 +297,15 @@ int main()
 	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry3->m_bxdf = diffusebxdfMesh;
+	planeLightGeometry4->m_bxdf = diffusebxdfMesh;
 
 	std::vector<Geometry> geometries;
-	geometries.push_back(*triangleMeshGeometry);
+	//geometries.push_back(*triangleMeshGeometry);
 	geometries.push_back(*planeLightGeometry);
 	geometries.push_back(*planeLightGeometry1);
 	geometries.push_back(*planeLightGeometry2);
 	geometries.push_back(*planeLightGeometry3);
+	geometries.push_back(*planeLightGeometry4);
 
 	// TODO: Load scene from file
 	int windowWidth  = 800;
@@ -388,7 +394,7 @@ int main()
 		cudaGraphicsResourceGetMappedPointer((void**)&pbo_dptr, &num_bytes, pboResource);
 		cudaMemset(pbo_dptr, 0, num_bytes);
 		{
-			launchPathTrace << < gridSize, blockSize >> > (pbo_dptr, state, camera, geometries.size());
+			launchPathTrace << < 1,1/*gridSize, blockSize*/ >> > (pbo_dptr, state, camera, geometries.size());
 		}
 		cudaGraphicsUnmapResources(1, &pboResource, 0);
 
