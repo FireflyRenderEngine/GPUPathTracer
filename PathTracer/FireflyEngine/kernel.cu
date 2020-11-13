@@ -232,7 +232,7 @@ int main()
 	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry2 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry3 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
-	Geometry* planeLightGeometry4 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.0f, 0.f), glm::vec3(0.f, 25.f, 0.f), glm::vec3(5.f));
+	//Geometry* planeLightGeometry4 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.0f, 0.f), glm::vec3(0.f, 25.f, 0.f), glm::vec3(5.f));
 
 	BXDF* diffusebxdfMesh = new BXDF();
 	diffusebxdfMesh->m_type = BXDFTyp::DIFFUSE;
@@ -248,15 +248,15 @@ int main()
 	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry3->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry4->m_bxdf = diffusebxdfMesh;
+	//planeLightGeometry4->m_bxdf = diffusebxdfMesh;
 
 	std::vector<Geometry> geometries;
-	//geometries.push_back(*triangleMeshGeometry);
+	geometries.push_back(*triangleMeshGeometry);
 	geometries.push_back(*planeLightGeometry);
 	geometries.push_back(*planeLightGeometry1);
 	geometries.push_back(*planeLightGeometry2);
 	geometries.push_back(*planeLightGeometry3);
-	geometries.push_back(*planeLightGeometry4);
+	//geometries.push_back(*planeLightGeometry4);
 
 	// TODO: Load scene from file
 	int windowWidth  = 800;
