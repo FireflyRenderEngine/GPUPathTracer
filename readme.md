@@ -47,5 +47,21 @@ In the second method which we have decided to go with for now, we have one mega 
 
 ## Bloopers : Not all roads lead to Rome
 
-### I can see right through you!
+### _I can see right through you!_
 
+![Blooper image 1](/bloopers/CaughtRedHanded.png)
+
+Rocketman is behind the planes and inside the cube. Yet it is still visible.
+We were very tempted to say this was a transparency shader but wisdom prevailed and we decided to fix this.
+
+Initially we thought it was an issue with the way we were finding and storing intersection with a triangle. And for the first time in a while we were correct!
+
+It was an issue with the way we were storing the distance for the point of intersection form the ray origin. We were sending one intersect object to store the point of intersection. This object updated the internal point of intersection for each successive triangle it intersected. So we effectively got the last triangle intersected to show up in the final render. 
+
+There were several other issues as well. Once we moved from sending the same intersect object to sending a local intersect object that gets updated if the intersect is found and then we check if the point of intersection is closer than the previous closest point and update the global intersect object. Another issue was when we were checking with the depth we had a global `Tmax` that we used to compare the incoming intersecting `t` value. This global `Tmax` was updated each time inside the for loop. Well that means that despite our previous fixes it would still show back triangles. We moved the `tMax` out of the loop to keep it's persistance and that solved the issue to some extent. Have a look...
+
+![Blooper image 2](/bloopers/seethrough.gif)
+
+It looks like there are several things wrong with this cube. The cube is made of top bottom and sides and two opposite sides. It fades away and also shows the top and bottom blue planes when looking head first at the green plane. This is because inside the set intersection function when we were pasing the local instersect object and global intersect object. In order to get the world point of intersection and world distance of interscetion we were using the global intersect object. Instead we should be using the local intersect object. We did that and that finally fixed the issue.  
+
+![Blooper image 2](/bloopers/seeThroughFixed.jpeg)
