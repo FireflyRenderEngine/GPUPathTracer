@@ -468,7 +468,7 @@ cudaError_t pxl_interop_size_set(struct pxl_interop* const interop, const int wi
 			cuda_err = cudaGraphicsUnregisterResource(interop->cgr[index]);
 
 		// resize rbo
-		glNamedRenderbufferStorage(interop->rb[index], GL_RGB, width, height);
+		glNamedRenderbufferStorage(interop->rb[index], GL_RGBA8, width, height);
 
 		// probe fbo status
 		// glCheckNamedFramebufferStatus(interop->fb[index],0);
@@ -987,9 +987,13 @@ void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
 		}
 	}
 }
-
+typedef glm::vec<4, unsigned char, glm::defaultp>		cvec4;
 void saveToPPM(glm::vec3* pixels, int height, int width)
 {
+	glm::ivec4* pixels4 = new glm::ivec4[width * height];
+
+	glReadBuffer(GL_BACK);
+	glReadPixels(0, 0, width, height, GL_RGBA8, GL_INT, pixels4);
 	std::ofstream renderFile;
 	renderFile.open("render.ppm");
 
@@ -999,9 +1003,10 @@ void saveToPPM(glm::vec3* pixels, int height, int width)
 
 	for (int i = 0; i < width * height; ++i)
 	{
-		renderFile << static_cast<int>(pixels[i].x) << " " << static_cast<int>(pixels[i].y) << " " << static_cast<int>(pixels[i].z) << std::endl;
+		renderFile << static_cast<int>(pixels4[i].x) << " " << static_cast<int>(pixels4[i].y) << " " << static_cast<int>(pixels4[i].z) << std::endl;
 	}
 	renderFile.close();
+	delete[] pixels4;
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) 

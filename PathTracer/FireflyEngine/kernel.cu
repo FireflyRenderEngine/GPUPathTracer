@@ -176,7 +176,7 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 	}
 	return intersectOut;
 }
-#include <curand_kernel.h>
+
 __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
 {
 	Geometry hitGeometry = geometries[intersect.geometryIndex];
@@ -191,31 +191,33 @@ __device__ void generateRays(Camera camera, Geometry* geometries, unsigned int r
 	int y = blockIdx.y* blockDim.y + threadIdx.y;
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
-
+	
 	if (pixelIndex >= pixelSize)
 	{
 		return;
 	}
 	Ray ray;
 	ray.m_origin = camera.m_position;
-
+	
 	float Px = (x / camera.m_screenWidth) * 2.f - 1.f;
 	float Py = 1.f - (y / camera.m_screenHeight) * 2.f;
-
+	
 	glm::vec3 wLookAtPoint = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix() * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
-
+	
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
-
-	//Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
-
-	//if (intersect.m_hit)
+	
+	Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
+	
+	if (intersect.m_hit)
 	{
-		//Ray outgoingRay;
-		//outgoingRay.m_origin = intersect.m_intersectionPoint;
-		//glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
-		surf2Dwrite(make_uchar3(255.f, 0 * 255.f, 0 * 255.f), // even simpler: (unsigned int)clock()
+		Ray outgoingRay;
+		outgoingRay.m_origin = intersect.m_intersectionPoint;
+		glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
+		
+		surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f), // even simpler: (unsigned int)clock()
+		//surf2Dwrite(make_uchar4(255.f, 0.2f * 255.f, 0.9f * 255.f, 255.f), // even simpler: (unsigned int)clock
 			surf,
-			x * sizeof(uchar3),
+			x * sizeof(uchar4),
 			y,
 			cudaBoundaryModeZero); // squelches out-of-bound writes
 		//pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
@@ -247,9 +249,10 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 
 	dim3 blockSize(16, 16, 1);
 	dim3 gridSize;
-	gridSize.x = (width / blockSize.x);// +1;
-	gridSize.y = (height / blockSize.y);// +1;
-
+	gridSize.x = ((width + blockSize.x - 1) / blockSize.x);
+	gridSize.y = ((height + blockSize.y -1) / blockSize.y);
+	const int blocks = (width * height + 256 - 1) / 256;
+	
 	launchPathTrace << < gridSize, blockSize , 0, stream >> > (geom, camera, numGeom);
 
 	return cudaSuccess;
@@ -260,8 +263,8 @@ int main()
 	PathTracerState state;
 
 	std::vector<Triangle> trianglesInMesh;
-	//LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
-	//Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
+	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	Geometry*  planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, 2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
@@ -278,7 +281,7 @@ int main()
 	lightbxdfPlane->m_intensity = 2.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	//triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
+	triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
@@ -338,11 +341,6 @@ int main()
 
 	glm::vec3* pixels = new glm::vec3[cameraResolution];
 
-	dim3 blockSize(16, 16, 1);
-	dim3 gridSize;
-	gridSize.x = (windowWidth / blockSize.x);// +1;
-	gridSize.y = (windowHeight / blockSize.y);// +1;
-
 	Camera camera;
 	camera.m_position = glm::vec3(0.f, 0.f, 15.f);
 	camera.m_forward = glm::vec3(0.f, 0.f, -1.f);
@@ -393,6 +391,9 @@ int main()
 			0, viewer->interop->height, viewer->interop->width, 0,
 			GL_COLOR_BUFFER_BIT,
 			GL_NEAREST);
+
+		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
 		// pxl_interop_clear(interop);
 		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
 
