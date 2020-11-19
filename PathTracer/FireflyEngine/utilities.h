@@ -187,6 +187,7 @@ struct Geometry
 		m_modelMatrix = translateM * rotateM * scaleM;
 
 		m_inverseModelMatrix = glm::inverse(m_modelMatrix);
+		m_invTransModelMatrix = glm::inverse(glm::transpose(m_modelMatrix));
 
 		switch (m_geometryType)
 		{
@@ -223,6 +224,8 @@ struct Geometry
 	glm::mat4 m_modelMatrix;
 
 	glm::mat4 m_inverseModelMatrix;
+
+	glm::mat4 m_invTransModelMatrix;
 
 	float m_sphereRadius;
 	// CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
@@ -290,28 +293,30 @@ struct Camera
 	float m_xDelta = 0.f;
 	float m_yDelta = 0.f;
 
+	glm::mat4 m_invViewProj;
+
 	void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight)
 	{
 		m_screenWidth = screenWidth;
 		m_screenHeight = screenHeight;
 	}
 
-	__device__ glm::mat4 GetViewMatrix()
+	glm::mat4 GetViewMatrix()
 	{
 		return glm::lookAtRH(m_position, m_position + m_forward, m_up);
 	}
 
-	__device__ glm::mat4 GetInverseViewMatrix()
+	glm::mat4 GetInverseViewMatrix()
 	{
 		return glm::inverse(GetViewMatrix());
 	}
 
-	__device__ glm::mat4 GetProjectionMatrix()
+	glm::mat4 GetProjectionMatrix()
 	{
 		return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
 	}
 
-	__device__ glm::mat4 GetInverseProjectionMatrix()
+	glm::mat4 GetInverseProjectionMatrix()
 	{
 		return glm::inverse(GetProjectionMatrix());
 	}

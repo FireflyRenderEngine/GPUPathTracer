@@ -46,12 +46,6 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	edge1 = vertex1 - vertex0;
 	edge2 = vertex2 - vertex0;
 
-	// Normal for backface culling
-	glm::vec3 Normal = glm::cross(edge1, edge2);
-	if (glm::dot(ray.m_direction, Normal) > 0) {
-		return false; // back-facing surface
-	}
-
 	pvec = glm::cross(ray.m_direction, edge2);
 	det = glm::dot(edge1, pvec);
 
@@ -82,20 +76,6 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	u *= invDet;
 	v *= invDet;
 
-	//if (det)
-
-	////u = invDet * glm::dot(tvec, pvec);
-	//if (u < 0.0 || u > 1.0)
-	//{
-	//	return false;
-	//}
-	////v = invDet * ;
-	//if (v < 0.0 || u + v > 1.0)
-	//	return false;
-
-
-	// At this stage we can compute t to find out where the intersection point is on the line.
-	//float t = invDet * glm::dot(edge2, qvec);
 	if (t > EPSILON) // ray intersection
 	{
 		intersect.m_intersectionPoint = ray.m_origin + ray.m_direction * t;
@@ -109,14 +89,14 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	}
 }
 
-__device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 modelMatrix, const Ray& ray)
+__device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 invTransModelMatrix, glm::mat4 modelMatrix,const Ray& ray)
 {
 	// convert point of intersection into world space
 	glm::vec3 worldPOI = modelMatrix * glm::vec4(objectSpaceIntersect.m_intersectionPoint, 1.0f);
 	float distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
 	if (distanceOfPOI < tMax)
 	{
-		intersectOut.m_normal = glm::inverse(glm::transpose(modelMatrix)) * glm::vec4(objectSpaceIntersect.m_normal, 0.f);
+		intersectOut.m_normal = invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_normal, 0.f);
 		intersectOut.m_intersectionPoint = worldPOI;
 		intersectOut.m_t = distanceOfPOI;
 		intersectOut.m_hit = true;
@@ -149,7 +129,7 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 
 				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
 				{
-					if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+					if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_invTransModelMatrix, geometry.m_modelMatrix, ray)) {
 						intersectOut.geometryIndex = i;
 						intersectOut.triangleIndex = j;
 					}
@@ -160,7 +140,7 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 		{
 			if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
 			{
-				if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray)) {
+				if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_invTransModelMatrix, geometry.m_modelMatrix, ray)) {
 					intersectOut.geometryIndex = i;
 				}
 			}
@@ -181,7 +161,7 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 {
 	Geometry hitGeometry = geometries[intersect.geometryIndex];
 
-	Ray& objectSpaceRay = Ray(hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_origin, 1.f), hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_direction, 0.f));
+	//Ray& objectSpaceRay = Ray(hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_origin, 1.f), hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_direction, 0.f));
 	return glm::abs(intersect.m_normal);// hitGeometry.m_bxdf->bsdf(-objectSpaceRay.m_direction, intersect.m_normal, outgoingRayDirection, intersect);
 }
 
@@ -202,13 +182,13 @@ __device__ void generateRays(Camera camera, Geometry* geometries, unsigned int r
 	float Px = (x / camera.m_screenWidth) * 2.f - 1.f;
 	float Py = 1.f - (y / camera.m_screenHeight) * 2.f;
 	
-	glm::vec3 wLookAtPoint = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix() * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
+	glm::vec3 wLookAtPoint = camera.m_invViewProj * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
 	
-	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
+	ray.m_direction = (wLookAtPoint - ray.m_origin);
 	
 	Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
 	
-	if (intersect.m_hit)
+	if ( intersect.m_hit)
 	{
 		Ray outgoingRay;
 		outgoingRay.m_origin = intersect.m_intersectionPoint;
@@ -262,9 +242,9 @@ int main()
 {
 	PathTracerState state;
 
-	std::vector<Triangle> trianglesInMesh;
-	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
+	//std::vector<Triangle> trianglesInMesh;
+	//LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
+	//Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	Geometry*  planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, 2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
@@ -281,7 +261,7 @@ int main()
 	lightbxdfPlane->m_intensity = 2.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
+	//triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
@@ -354,6 +334,8 @@ int main()
 	camera.m_yaw = -90.f;
 	camera.UpdateBasisAxis();
 
+	camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
+
 	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
 	//viewer->Create();
 
@@ -364,6 +346,7 @@ int main()
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
 		processInput(viewer->m_window, camera, pixels);
+		camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
 		//
 		// EXECUTE CUDA KERNEL ON RENDER BUFFER
