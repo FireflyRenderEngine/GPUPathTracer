@@ -430,6 +430,83 @@ static void glfw_error_callback(int error, const char* description)
 	fputs(description, stderr);
 }
 
+struct pxl_interop
+{
+	// split GPUs?
+	bool                    multi_gpu;
+
+	// number of fbo's
+	int                     count;
+	int                     index;
+
+	// w x h
+	int                     width;
+	int                     height;
+
+	// GL buffers
+	GLuint* fb;
+	GLuint* rb;
+
+	// CUDA resources
+	cudaGraphicsResource_t* cgr;
+	cudaArray_t* ca;
+};
+
+cudaError_t pxl_interop_size_set(struct pxl_interop* const interop, const int width, const int height)
+{
+	cudaError_t cuda_err = cudaSuccess;
+
+	// save new size
+	interop->width = width;
+	interop->height = height;
+
+	// resize color buffer
+	for (int index = 0; index < interop->count; index++)
+	{
+		// unregister resource
+		if (interop->cgr[index] != NULL)
+			cuda_err = cudaGraphicsUnregisterResource(interop->cgr[index]);
+
+		// resize rbo
+		glNamedRenderbufferStorage(interop->rb[index], GL_RGB, width, height);
+
+		// probe fbo status
+		// glCheckNamedFramebufferStatus(interop->fb[index],0);
+
+		// register rbo
+		cuda_err = cudaGraphicsGLRegisterImage(&interop->cgr[index],
+			interop->rb[index],
+			GL_RENDERBUFFER,
+			cudaGraphicsRegisterFlagsSurfaceLoadStore |
+			cudaGraphicsRegisterFlagsWriteDiscard);
+	}
+
+	// map graphics resources
+	cuda_err = cudaGraphicsMapResources(interop->count, interop->cgr, 0);
+
+	// get CUDA Array refernces
+	for (int index = 0; index < interop->count; index++)
+	{
+		cuda_err = cudaGraphicsSubResourceGetMappedArray(&interop->ca[index],
+			interop->cgr[index],
+			0, 0);
+	}
+
+	// unmap graphics resources
+	cuda_err = cudaGraphicsUnmapResources(interop->count, interop->cgr, 0);
+
+	return cuda_err;
+}
+
+
+void pxl_glfw_window_size_callback(GLFWwindow* window, int width, int height)
+{
+	// get context
+	struct pxl_interop* const interop = (struct pxl_interop* const) glfwGetWindowUserPointer(window);
+
+	pxl_interop_size_set(interop, width, height);
+}
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 struct GLFWViewer 
 {
@@ -468,12 +545,14 @@ struct GLFWViewer
 
 		// ignore vsync for now
 		glfwSwapInterval(0);
+		// only copy r/g/b
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+
+		InitCUDA();
 	}
 
 	void InitCUDA()
 	{
-		cudaError_t cuda_err;
-
 		int gl_device_id;
 		unsigned int gl_device_count;
 		cuda_err = (cudaGLGetDevices(&gl_device_count, &gl_device_id, 1, cudaGLDeviceListAll));
@@ -500,14 +579,77 @@ struct GLFWViewer
 		//
 		// CREATE CUDA STREAM & EVENT
 		//
-		cudaStream_t stream;
-		cudaEvent_t  event;
+
 
 		cuda_err = (cudaStreamCreateWithFlags(&stream, cudaStreamDefault));   // optionally ignore default stream behavior
 		cuda_err = (cudaEventCreateWithFlags(&event, cudaEventBlockingSync)); // | cudaEventDisableTiming);
 
+		CreateInterop();
 	}
 	
+	struct pxl_interop*
+		pxl_interop_create(const bool multi_gpu, const int fbo_count)
+	{
+		struct pxl_interop* const interop = (struct pxl_interop* const)calloc(1, sizeof(*interop));
+
+		interop->multi_gpu = multi_gpu;
+		interop->count = fbo_count;
+		interop->index = 0;
+
+		// allocate arrays
+		interop->fb = (GLuint*)calloc(fbo_count, sizeof(*(interop->fb)));
+		interop->rb = (GLuint*)calloc(fbo_count, sizeof(*(interop->rb)));
+		interop->cgr = (cudaGraphicsResource_t*)calloc(fbo_count, sizeof(*(interop->cgr)));
+		interop->ca = (cudaArray_t*)calloc(fbo_count, sizeof(*(interop->ca)));
+
+		// render buffer object w/a color buffer
+		glCreateRenderbuffers(fbo_count, interop->rb);
+
+		// frame buffer object
+		glCreateFramebuffers(fbo_count, interop->fb);
+
+		// attach rbo to fbo
+		for (int index = 0; index < fbo_count; index++)
+		{
+			glNamedFramebufferRenderbuffer(interop->fb[index],
+				GL_COLOR_ATTACHMENT0,
+				GL_RENDERBUFFER,
+				interop->rb[index]);
+		}
+
+		// return it
+		return interop;
+	}
+
+	void CreateInterop()
+	{
+		//
+		// CREATE INTEROP
+		//
+		// TESTING -- DO NOT SET TO FALSE, ONLY TRUE IS RELIABLE
+		interop = pxl_interop_create(true /*multi_gpu*/, 2);
+
+		//
+		// RESIZE INTEROP
+		//
+
+		int width, height;
+
+		// get initial width/height
+		glfwGetFramebufferSize(m_window, &width, &height);
+
+		// resize with initial window dimensions
+		cuda_err = pxl_interop_size_set(interop, width, height);
+
+		//
+		// SET USER POINTER AND CALLBACKS
+		//
+		glfwSetWindowUserPointer(m_window, interop);
+		//glfwSetKeyCallback(m_window, pxl_glfw_key_callback);
+		glfwSetFramebufferSizeCallback(m_window, pxl_glfw_window_size_callback);
+
+	}
+
 	void cleanupCuda()
 	{
 		if (pbo)
@@ -768,6 +910,13 @@ struct GLFWViewer
 
 	// Pixels used as a texture to paint the quad
 	glm::vec3* m_pixels;
+
+	cudaStream_t stream;
+	cudaEvent_t  event;
+
+	cudaError_t cuda_err;
+
+	struct pxl_interop* interop;
 
 	// The CUDA Graphics Resource is used to map the OpenGL texture to a CUDA
 	// buffer that can be used in a CUDA kernel.

@@ -5,6 +5,8 @@
 
 #include <cmath>
 
+surface<void, cudaSurfaceType2D> surf;
+
 __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect& intersect)
 {
 	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
@@ -174,7 +176,7 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 	}
 	return intersectOut;
 }
-
+#include <curand_kernel.h>
 __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
 {
 	Geometry hitGeometry = geometries[intersect.geometryIndex];
@@ -183,7 +185,7 @@ __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, g
 	return glm::abs(intersect.m_normal);// hitGeometry.m_bxdf->bsdf(-objectSpaceRay.m_direction, intersect.m_normal, outgoingRayDirection, intersect);
 }
 
-__device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, unsigned int raytracableObjects)
+__device__ void generateRays(Camera camera, Geometry* geometries, unsigned int raytracableObjects)
 {
 	int x = blockIdx.x* blockDim.x + threadIdx.x;
 	int y = blockIdx.y* blockDim.y + threadIdx.y;
@@ -204,20 +206,53 @@ __device__ void generateRays(uchar3* pbo, Camera camera, Geometry* geometries, u
 
 	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 
-	Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
+	//Intersect intersect = intersectRays(ray, geometries, raytracableObjects);
 
-	if (intersect.m_hit)
+	//if (intersect.m_hit)
 	{
-		Ray outgoingRay;
-		outgoingRay.m_origin = intersect.m_intersectionPoint;
-		glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
-		pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
+		//Ray outgoingRay;
+		//outgoingRay.m_origin = intersect.m_intersectionPoint;
+		//glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
+		surf2Dwrite(make_uchar3(255.f, 0 * 255.f, 0 * 255.f), // even simpler: (unsigned int)clock()
+			surf,
+			x * sizeof(uchar3),
+			y,
+			cudaBoundaryModeZero); // squelches out-of-bound writes
+		//pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
 	}
 }
 
-__global__ void launchPathTrace(uchar3* pbo, Geometry* geometries, Camera camera, int numberOfGeometries)
+__global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries)
 {
-	generateRays(pbo, camera, geometries, numberOfGeometries);
+	generateRays(camera, geometries, numberOfGeometries);
+}
+
+cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
+	const int         width,
+	const int         height,
+	cudaEvent_t       event,
+	cudaStream_t      stream,
+	Geometry* geom,
+	Camera camera,
+	int numGeom)
+{
+	cudaError_t cuda_err;
+
+	// cuda_err = cudaEventRecord(event,stream);
+
+	cuda_err = cudaBindSurfaceToArray(surf, array);
+
+	if (cuda_err)
+		return cuda_err;
+
+	dim3 blockSize(16, 16, 1);
+	dim3 gridSize;
+	gridSize.x = (width / blockSize.x);// +1;
+	gridSize.y = (height / blockSize.y);// +1;
+
+	launchPathTrace << < gridSize, blockSize , 0, stream >> > (geom, camera, numGeom);
+
+	return cudaSuccess;
 }
 
 int main()
@@ -225,8 +260,8 @@ int main()
 	PathTracerState state;
 
 	std::vector<Triangle> trianglesInMesh;
-	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
+	//LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
+	//Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	Geometry*  planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, 2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
@@ -243,7 +278,7 @@ int main()
 	lightbxdfPlane->m_intensity = 2.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
+	//triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
 	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
@@ -322,7 +357,7 @@ int main()
 	camera.UpdateBasisAxis();
 
 	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
-	viewer->Create();
+	//viewer->Create();
 
 	state.d_camera = nullptr;
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
@@ -332,28 +367,36 @@ int main()
 	{
 		processInput(viewer->m_window, camera, pixels);
 
-		uchar3* pbo_dptr = NULL;
-		size_t num_bytes;
-		cudaGraphicsResource* pboResource = (viewer->getPBOResource());
-		cudaGraphicsMapResources(1, &pboResource, 0);
-		cudaGraphicsResourceGetMappedPointer((void**)&pbo_dptr, &num_bytes, pboResource);
-		cudaMemset(pbo_dptr, 0, num_bytes);
+		//
+		// EXECUTE CUDA KERNEL ON RENDER BUFFER
+		//
+
+		cudaGraphicsMapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 		{
-			launchPathTrace << < /*1,1*/gridSize, blockSize >> > (pbo_dptr, state.d_geometry, camera, geometries.size());
+			viewer->cuda_err = pxl_kernel_launcher(viewer->interop->ca[viewer->interop->index] ,
+				windowWidth,
+				windowHeight,
+				viewer->event,
+				viewer->stream,
+				state.d_geometry, camera, geometries.size());
 		}
-		cudaGraphicsUnmapResources(1, &pboResource, 0);
+		cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 
 		std::string title = "Firefly";
 		glfwSetWindowTitle(viewer->m_window, title.c_str());
 
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, viewer->getPBO());
-		glBindTexture(GL_TEXTURE_2D, viewer->getTexture());
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, windowWidth, windowHeight, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+		//
+		// BLIT & SWAP FBO
+		// 
+		glBlitNamedFramebuffer(viewer->interop->fb[viewer->interop->index], 0,
+			0, 0, viewer->interop->width, viewer->interop->height,
+			0, viewer->interop->height, viewer->interop->width, 0,
+			GL_COLOR_BUFFER_BIT,
+			GL_NEAREST);
+		// pxl_interop_clear(interop);
+		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
 
-		glClearColor(0.0f, 0.f, 0.f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
 
-		viewer->Draw();
 		glfwSwapBuffers(viewer->m_window);
 		glfwPollEvents();
 	}
@@ -364,7 +407,7 @@ int main()
 	cudaFree(state.d_geometry);
 	delete[] pixels;
 	delete viewer;
-	delete triangleMeshGeometry;
+	//delete triangleMeshGeometry;
 	//cudaFree(hostTriangleData);
 	return 0;
 }
