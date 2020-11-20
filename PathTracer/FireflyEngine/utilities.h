@@ -104,7 +104,7 @@ struct BXDF
 
 		//only diffuse for now
 		//TODO: add bsdf for every other material type
-		if (BXDFTyp::DIFFUSE)
+		if (m_type == BXDFTyp::DIFFUSE)
 		{
 			// sample a point on hemisphere to return an outgoing ray
 			glm::vec2 sample;
@@ -121,17 +121,20 @@ struct BXDF
 			// do warp from square to cosine weighted hemisphere
 
 			outgoing = CosineSampleHemisphere(sample[0], sample[1]);
-			return m_albedo * glm::abs(glm::dot(intersect.m_normal, incoming));
+			return m_albedo / CUDART_PI_F;
 		}
 	}
 
-	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing)
+	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& normal)
 	{
 		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 
 		//only diffuse for now
 		//TODO: add pdf for every other material type
-		return incoming.z / CUDART_PI_F;
+		if (m_type == BXDFTyp::DIFFUSE )
+		{
+			return glm::abs(glm::dot(incoming, normal)) / CUDART_PI_F;
+		}
 	}
 };
 
