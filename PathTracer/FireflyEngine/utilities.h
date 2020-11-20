@@ -87,10 +87,8 @@ struct BXDF
 	float m_intensity{ -1 };
 	glm::vec3 m_transmittanceColor{ -1,-1,-1 };
 	
-	__device__ glm::vec3 bsdf(const glm::vec3& incoming, const glm::vec3& normal, glm::vec3& outgoing, const Intersect& intersect)
+	__device__ glm::vec3 bsdf(const glm::vec3& incoming, glm::vec3& outgoing, const Intersect& intersect)
 	{
-		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-
 		//ASSUMPTION: incoming vector points away from the point of intersection
 
 		if (m_type == BXDFTyp::EMITTER)
@@ -123,8 +121,7 @@ struct BXDF
 			// do warp from square to cosine weighted hemisphere
 
 			outgoing = CosineSampleHemisphere(sample[0], sample[1]);
-
-			return m_albedo * glm::abs(glm::dot(normal, incoming));
+			return m_albedo * glm::abs(glm::dot(intersect.m_normal, incoming));
 		}
 	}
 
@@ -264,6 +261,16 @@ struct Ray
 		:m_origin(origin), m_direction(direction)
 	{
 	}
+	__device__ Ray& operator=(const Ray& otherRay) {
+		m_origin = otherRay.m_origin;
+		m_direction = otherRay.m_direction;
+		return *this;
+	}
+	__device__ Ray(const Ray& otherRay) {
+		m_origin = otherRay.m_origin;
+		m_direction = otherRay.m_direction;
+	}
+
 	glm::vec3 m_origin;
 	glm::vec3 m_direction;
 	// TODO: Padding

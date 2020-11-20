@@ -78,9 +78,16 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 
 	if (t > EPSILON) // ray intersection
 	{
-		intersect.m_intersectionPoint = ray.m_origin + ray.m_direction * t;
+		glm::vec3 intersectPoint = ray.m_origin + ray.m_direction * t;
+		intersect.m_intersectionPoint = intersectPoint;
 		intersect.m_t = t;
-		intersect.m_normal = glm::normalize(glm::cross(edge1, edge2));
+
+		// Calculate the normal using barycentric coordinates
+		float denom = (vertex1.y - vertex2.y) * (vertex0.x - vertex2.x) + (vertex2.x - vertex1.x) * (vertex0.y - vertex2.y);
+		float wv1 = ((vertex1.y - vertex2.y) * (intersectPoint.x - vertex2.x) + (vertex2.x - vertex1.x) * (intersectPoint.y - vertex2.y)) / denom;
+		float wv2 = ((vertex2.y - vertex0.y) * (intersectPoint.x - vertex2.x) + (vertex0.x - vertex2.x) * (intersectPoint.y - vertex2.y)) / denom;
+		float wv3 = 1 - wv1 - wv2;
+		intersect.m_normal = glm::normalize((wv1 * triangle.m_n0) + (wv2 * triangle.m_n1) + (wv3 * triangle.m_n2));
 		return true;
 	}
 	else // This means that there is a line intersection but not a ray intersection.
@@ -96,7 +103,7 @@ __device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Inte
 	float distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
 	if (distanceOfPOI < tMax)
 	{
-		intersectOut.m_normal = invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_normal, 0.f);
+		intersectOut.m_normal = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_normal, 0.f)));
 		intersectOut.m_intersectionPoint = worldPOI;
 		intersectOut.m_t = distanceOfPOI;
 		intersectOut.m_hit = true;
@@ -159,10 +166,7 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 
 __device__ glm::vec3 shade(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
 {
-	Geometry hitGeometry = geometries[intersect.geometryIndex];
-
-	//Ray& objectSpaceRay = Ray(hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_origin, 1.f), hitGeometry.m_inverseModelMatrix * glm::vec4(incomingRay.m_direction, 0.f));
-	return glm::abs(intersect.m_normal);// hitGeometry.m_bxdf->bsdf(-objectSpaceRay.m_direction, intersect.m_normal, outgoingRayDirection, intersect);
+	return (geometries[intersect.geometryIndex].m_bxdf->bsdf(glm::normalize(-incomingRay.m_direction), outgoingRayDirection, intersect));
 }
 
 __device__ void generateRays(Camera camera, Geometry* geometries, unsigned int raytracableObjects)
@@ -194,13 +198,11 @@ __device__ void generateRays(Camera camera, Geometry* geometries, unsigned int r
 		outgoingRay.m_origin = intersect.m_intersectionPoint;
 		glm::vec3 pixelColor = shade(ray, intersect, outgoingRay.m_direction, geometries);
 		
-		surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f), // even simpler: (unsigned int)clock()
-		//surf2Dwrite(make_uchar4(255.f, 0.2f * 255.f, 0.9f * 255.f, 255.f), // even simpler: (unsigned int)clock
+		surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f), 
 			surf,
 			x * sizeof(uchar4),
 			y,
-			cudaBoundaryModeZero); // squelches out-of-bound writes
-		//pbo[pixelIndex] = make_uchar3(pixelColor.x*255.f, pixelColor.y*255.f, pixelColor.z*255.f);
+			cudaBoundaryModeZero); 
 	}
 }
 
@@ -242,9 +244,9 @@ int main()
 {
 	PathTracerState state;
 
-	//std::vector<Triangle> trianglesInMesh;
-	//LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
-	//Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 90.0f, 180.0f), glm::vec3(1.0f), trianglesInMesh);
+	std::vector<Triangle> trianglesInMesh;
+	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 180.0f, 0.0f), glm::vec3(1.0f), trianglesInMesh);
 
 	Geometry*  planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, 2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry1 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -2.5f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(5.f));
@@ -252,29 +254,41 @@ int main()
 	Geometry* planeLightGeometry3 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 2.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* planeLightGeometry4 = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.0f, 0.f), glm::vec3(0.f, 25.f, 0.f), glm::vec3(5.f));
 
-	BXDF* diffusebxdfMesh = new BXDF();
-	diffusebxdfMesh->m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfMesh->m_albedo = { 1.f, 0.f, 0.f };
+	BXDF* diffusebxdfREDMesh = new BXDF();
+	diffusebxdfREDMesh->m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfREDMesh->m_albedo = { 1.f, 0.f, 0.f };
+
+	BXDF* diffusebxdGREENfMesh = new BXDF();
+	diffusebxdGREENfMesh->m_type = BXDFTyp::DIFFUSE;
+	diffusebxdGREENfMesh->m_albedo = { 0.f, 1.f, 0.f };
+
+	BXDF* diffusebxdfBLUEMesh = new BXDF();
+	diffusebxdfBLUEMesh->m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfBLUEMesh->m_albedo = { 0.f, 0.f, 1.f };
+
+	BXDF* diffusebxdfPURPLEMesh = new BXDF();
+	diffusebxdfPURPLEMesh->m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfPURPLEMesh->m_albedo = { 1.f, 0.f, 1.f };
 
 	BXDF* lightbxdfPlane = new BXDF();
 	lightbxdfPlane->m_type = BXDFTyp::EMITTER;
 	lightbxdfPlane->m_intensity = 2.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	//triangleMeshGeometry->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry1->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry2->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry3->m_bxdf = diffusebxdfMesh;
-	planeLightGeometry4->m_bxdf = diffusebxdfMesh;
+	triangleMeshGeometry->m_bxdf = diffusebxdfREDMesh;
+	planeLightGeometry->m_bxdf = diffusebxdGREENfMesh;
+	planeLightGeometry1->m_bxdf = diffusebxdfBLUEMesh;
+	planeLightGeometry2->m_bxdf = diffusebxdfPURPLEMesh;
+	planeLightGeometry3->m_bxdf = diffusebxdGREENfMesh;
+	planeLightGeometry4->m_bxdf = diffusebxdfREDMesh;
 
 	std::vector<Geometry> geometries;
-	//geometries.push_back(*triangleMeshGeometry);
-	geometries.push_back(*planeLightGeometry);
-	geometries.push_back(*planeLightGeometry1);
-	geometries.push_back(*planeLightGeometry2);
-	geometries.push_back(*planeLightGeometry3);
-	geometries.push_back(*planeLightGeometry4);
+	geometries.push_back(*triangleMeshGeometry);
+	//geometries.push_back(*planeLightGeometry);
+	//geometries.push_back(*planeLightGeometry1);
+	//geometries.push_back(*planeLightGeometry2);
+	//geometries.push_back(*planeLightGeometry3);
+	//geometries.push_back(*planeLightGeometry4);
 
 	// TODO: Load scene from file
 	int windowWidth  = 800;
