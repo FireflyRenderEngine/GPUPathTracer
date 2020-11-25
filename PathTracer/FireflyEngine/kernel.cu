@@ -193,10 +193,9 @@ __device__ Ray& generateRay(Camera camera, int x, int y)
 
 __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int maxIterations)
 {
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
-	
-	//x = 400, y = 400;
+	int x = blockIdx.x* blockDim.x + threadIdx.x;
+	int y = blockIdx.y* blockDim.y + threadIdx.y;
+
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
 
@@ -212,39 +211,43 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 	//   2.a get bsdf and pdf
 	//   2.b get outgoing ray
 	//   2.c calculate thruput and calculate russian roulette
-	int iterations = maxIterations;
+	int iterations = 0;
 	glm::vec3 pixelColor(0.f, 0.f, 0.f);
 	Ray& ray = generateRay(camera, x, y);
 
 	glm::vec3 thruput(1.f);
+
 	do
 	{
 		Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
-
 		if (!intersect.m_hit)
 		{
-			thruput *= 0.f;
+			pixelColor = glm::vec3(0.1, 0.4, 0.2); //REMOVE ME
+			thruput *= 0.0f;
 			break;
 		}
-		Ray outgoingRay;
-		outgoingRay.m_origin = intersect.m_intersectionPoint;
+		else {
+			Ray outgoingRay;
+			outgoingRay.m_origin = intersect.m_intersectionPoint;
 
-		glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
-		if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-		{
-			// add to thruput and exit since we hit an emitter
-			pixelColor += thruput * bxdf;
-			iterations--;
-			break;
-		}
-		
-		float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
-		
-		if (pdf <= 0.000005f)
-		{
-			iterations--;
-			break;
-		}
+			glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
+			if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+			{
+				// add to thruput and exit since we hit an emitter
+				pixelColor += thruput * bxdf;// do abscos
+				thruput *= 0.0f;
+				break;
+			}
+
+			float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
+
+			
+			// pixelColor += emitted light + integral of (bxdf/pdf)
+			if (pdf > 0.001) {
+				float dotProd = glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal));
+				printf("dotProd : %f\n", dotProd);
+				thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
+			}
 
 		thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
 		
@@ -269,8 +272,6 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 		x * sizeof(uchar4),
 		y,
 		cudaBoundaryModeZero);
-
-	
 }
 
 cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
