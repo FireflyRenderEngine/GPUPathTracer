@@ -226,7 +226,8 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 			thruput *= 0.0f;
 			break;
 		}
-		else {
+		else
+		{
 			Ray outgoingRay;
 			outgoingRay.m_origin = intersect.m_intersectionPoint;
 
@@ -235,30 +236,30 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 			{
 				// add to thruput and exit since we hit an emitter
 				pixelColor += thruput * bxdf;// do abscos
-				thruput *= 0.0f;
+				//thruput *= 0.0f;
 				break;
 			}
 
 			float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
 
-			
+
 			// pixelColor += emitted light + integral of (bxdf/pdf)
-			if (pdf > 0.001) {
+			if (pdf > 0.001)
+			{
 				float dotProd = glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal));
-				printf("dotProd : %f\n", dotProd);
+				//printf("dotProd : %f\n", dotProd);
 				thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
 			}
 
-		thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
-		
+			//thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
 
-		// set the next ray for iteration
-		glm::vec3 originOffset = 0.000005f * intersect.m_normal;
-		outgoingRay.m_origin += glm::dot(outgoingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
-		ray = outgoingRay;
 
+			// set the next ray for iteration
+			glm::vec3 originOffset = 0.000005f * intersect.m_normal;
+			outgoingRay.m_origin += glm::dot(outgoingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+			ray = outgoingRay;
+		}
 		iterations--;
-		//pixelColor = glm::abs(intersect.m_normal);
 	} while (iterations > 0);
 	
 	pixelColor += thruput;
