@@ -246,7 +246,7 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 			break;
 		}
 
-		thruput *= glm::abs(glm::dot(-(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
+		thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
 		
 
 		// set the next ray for iteration
@@ -255,11 +255,15 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 		ray = outgoingRay;
 
 		iterations--;
+		//pixelColor = glm::abs(intersect.m_normal);
 	} while (iterations > 0);
 	
 	pixelColor += thruput;
-	pixelColor /= (float)(maxIterations - iterations);
-
+	if (maxIterations - iterations > 0)
+	{
+		pixelColor /= (float)(maxIterations - iterations);
+	}
+	pixelColor = glm::abs(pixelColor);
 	surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f),
 		surf,
 		x * sizeof(uchar4),
@@ -407,7 +411,7 @@ int main()
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
-	int maxIterations = 8;
+	int maxIterations = 3;
 
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{

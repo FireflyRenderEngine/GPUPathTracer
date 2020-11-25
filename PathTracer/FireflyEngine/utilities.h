@@ -112,11 +112,13 @@ struct BXDF
 			int id = threadIdx.x + blockIdx.x * blockDim.x;
 			/* Each thread gets same seed, a different sequence
 			   number, no offset */
-			curandState state;
-			curand_init(1234, id, 0, &state);
+			curandState state1;
+			curandState state2;
+			curand_init((unsigned long long)clock() + id, id, 0, &state1);
+			curand_init((unsigned long long)clock() + id + 3, id, 0, &state2);
 
-			sample[0] = curand_uniform(&state);
-			sample[1] = curand_uniform(&state);
+			sample[0] = curand_uniform(&state1);
+			sample[1] = curand_uniform(&state2);
 
 			// do warp from square to cosine weighted hemisphere
 
