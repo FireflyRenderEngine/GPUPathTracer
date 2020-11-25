@@ -166,12 +166,12 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 
 __device__ glm::vec3 getBXDF(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->bsdf(glm::normalize(-incomingRay.m_direction), outgoingRayDirection, intersect));
+	return (geometries[intersect.geometryIndex].m_bxdf->bsdf((-incomingRay.m_direction), outgoingRayDirection, intersect));
 }
 
-__device__ float getPDF(const Ray& incomingRay, const Intersect& intersect, Geometry* geometries)
+__device__ float getPDF(const Ray& incomingRay, const glm::vec3& outgoingRayDirection, const Intersect& intersect, Geometry* geometries)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->pdf(glm::normalize(-incomingRay.m_direction), intersect.m_normal));
+	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), outgoingRayDirection, intersect.m_normal));
 }
 
 __device__ Ray& generateRay(Camera camera, int x, int y)
@@ -187,84 +187,87 @@ __device__ Ray& generateRay(Camera camera, int x, int y)
 
 	glm::vec3 wLookAtPoint = camera.m_invViewProj * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
 
-	ray.m_direction = (wLookAtPoint - ray.m_origin);
+	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
 	return ray;
 }
 
 __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int maxIterations)
 {
-			int x = blockIdx.x* blockDim.x + threadIdx.x;
-			int y = blockIdx.y* blockDim.y + threadIdx.y;
+	int x = blockIdx.x* blockDim.x + threadIdx.x;
+	int y = blockIdx.y* blockDim.y + threadIdx.y;
 
-			int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
-			int pixelIndex = y * camera.m_screenWidth + x;
+	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
+	int pixelIndex = y * camera.m_screenWidth + x;
 
-			if (pixelIndex >= pixelSize)
+	if (pixelIndex >= pixelSize)
+	{
+		return;
+	}
+	// Do Light transport here
+	// Loop until we hit max rays or russian roulette termination
+	// 1. Check if we hit a light
+	//   1.a if we hit light, then terminate
+	// 2. Check what material we hit
+	//   2.a get bsdf and pdf
+	//   2.b get outgoing ray
+	//   2.c calculate thruput and calculate russian roulette
+	int iterations = 0;
+	glm::vec3 pixelColor(0.f, 0.f, 0.f);
+	Ray& ray = generateRay(camera, x, y);
+
+	glm::vec3 thruput(1.f);
+
+	do
+	{
+		Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
+		if (!intersect.m_hit)
+		{
+			pixelColor = glm::vec3(0.1, 0.4, 0.2); //REMOVE ME
+			thruput *= 0.0f;
+			break;
+		}
+		else {
+			Ray outgoingRay;
+			outgoingRay.m_origin = intersect.m_intersectionPoint;
+
+			glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
+			if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 			{
-				return;
+				// add to thruput and exit since we hit an emitter
+				pixelColor += thruput * bxdf;// do abscos
+				thruput *= 0.0f;
+				break;
 			}
-			// Do Light transport here
-			// Loop until we hit max rays or russian roulette termination
-			// 1. Check if we hit a light
-			//   1.a if we hit light, then terminate
-			// 2. Check what material we hit
-			//   2.a get bsdf and pdf
-			//   2.b get outgoing ray
-			//   2.c calculate thruput and calculate russian roulette
-			int iterations = 1;
-			glm::vec3 pixelColor(0.f, 0.f, 0.f);
-			Ray& ray = generateRay(camera, x, y);
 
-			glm::vec3 thruput(1.f);
+			float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
 
-			do
-			{
-				Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
-
-				if (!intersect.m_hit)
-				{
-					break;
-				}
-				//printf("iteration: %d\n", iterations);
-				Ray outgoingRay;
-				outgoingRay.m_origin = intersect.m_intersectionPoint;
-
-				glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
-				//printf("bxdf: %f, %f, %f\n", bxdf.r, bxdf.g, bxdf.b);
-				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-				{
-					// add to thruput and exit since we hit an emitter
-					pixelColor += thruput * bxdf;// do abscos
-					break;
-				}
-
-				float pdf = getPDF(ray, intersect, geometries);
-				//printf("pdf: %f\n", pdf);
-
-				//printf("outgoing ray: %f, %f, %f\n", outgoingRay.m_direction.r, outgoingRay.m_direction.g, outgoingRay.m_direction.b);
-
-				// pixelColor += emitted light + integral of (bxdf/pdf)
+			
+			// pixelColor += emitted light + integral of (bxdf/pdf)
+			if (pdf > 0.001) {
+				float dotProd = glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal));
+				printf("dotProd : %f\n", dotProd);
 				thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
+			}
 
-				//printf("thruput: %f, %f, %f\n", thruput.r, thruput.g, thruput.b);
-				pixelColor += thruput;
+			// set the next ray for iteration
+			outgoingRay.m_origin += 0.01f * intersect.m_normal;
+			ray = outgoingRay;
 
-				// set the next ray for iteration
+		}
 
-				outgoingRay.m_origin += 0.01f * intersect.m_normal;
-				ray = outgoingRay;
+		iterations++;
+	} while (iterations < maxIterations);
 
-				iterations++;
-			} while (iterations <= maxIterations);
+	pixelColor += thruput;
+	if (iterations != 0) {
+		pixelColor /= iterations;
+	}
 
-			pixelColor /= iterations;
-			//printf("pixelColor: %f, %f, %f\n", pixelColor.r, pixelColor.g, pixelColor.b);
-
-			surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f),
-				surf,
-				x * sizeof(uchar4),
-				y,
-				cudaBoundaryModeZero);
+	surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f),
+		surf,
+		x * sizeof(uchar4),
+		y,
+		cudaBoundaryModeZero);
 }
 
 cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
@@ -302,11 +305,11 @@ int main()
 	PathTracerState state;
 
 	std::vector<Triangle> trianglesInMesh;
-	LoadMesh(R"(..\..\sceneResources\rocketman.obj)", trianglesInMesh);
+	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
 	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 180.0f, 0.0f), glm::vec3(1.0f), trianglesInMesh);
 
-	Geometry*  planeLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 10.f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
-	
+	Geometry*  topPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 5.f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry* leftPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
 
 	BXDF* diffusebxdfREDMesh = new BXDF();
 	diffusebxdfREDMesh->m_type = BXDFTyp::DIFFUSE;
@@ -330,11 +333,13 @@ int main()
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	triangleMeshGeometry->m_bxdf = diffusebxdfREDMesh;
-	planeLightGeometry->m_bxdf = lightbxdfPlane;
+	topPlaneLightGeometry->m_bxdf = lightbxdfPlane;
+	leftPlaneLightGeometry->m_bxdf = lightbxdfPlane;
 
 	std::vector<Geometry> geometries;
 	geometries.push_back(*triangleMeshGeometry);
-	geometries.push_back(*planeLightGeometry);
+	geometries.push_back(*topPlaneLightGeometry);
+	geometries.push_back(*leftPlaneLightGeometry);
 
 	// TODO: Load scene from file
 	int windowWidth  = 800;
@@ -403,7 +408,7 @@ int main()
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
-	int maxIterations = 2;
+	int maxIterations = 1;
 
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
