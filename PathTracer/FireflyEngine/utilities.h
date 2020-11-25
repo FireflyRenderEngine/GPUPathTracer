@@ -97,7 +97,7 @@ struct BXDF
 			bool twoSided = true;
 			outgoing = glm::vec3(0, 0, 0);
 			// means we have a light source
-			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, incoming) > 0)) ? m_emissiveColor * m_intensity : noHitColor();
+			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, incoming) > 0)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);// noHitColor();
 		}
 
 		//else other materials
@@ -120,12 +120,12 @@ struct BXDF
 
 			// do warp from square to cosine weighted hemisphere
 
-			outgoing = CosineSampleHemisphere(sample[0], sample[1]);
+			outgoing = glm::normalize(CosineSampleHemisphere(sample[0], sample[1]));
 			return m_albedo / CUDART_PI_F;
 		}
 	}
 
-	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& normal)
+	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing, const glm::vec3& normal)
 	{
 		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 
