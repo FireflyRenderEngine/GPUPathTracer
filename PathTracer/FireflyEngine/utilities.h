@@ -41,9 +41,19 @@ __device__ void print(const char* label, float value)
 	printf("%s: %f\n", label, value);
 }
 
-__device__ void printVec3(const char* label, glm::vec3 value)
+__device__ void print(const char* label, int value)
+{
+	printf("%s: %d\n", label, value);
+}
+
+__device__ void print(const char* label, glm::vec3 value)
 {
 	printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
+}
+
+__device__ void print(const char* label, uchar4 value)
+{
+	printf("%s: %d, %d, %d, %d\n", label, value.x, value.y, value.z, value.w);
 }
 
 // ------------------DATA CONTAINER STRUCTS------------------
@@ -142,21 +152,18 @@ struct BXDF
 			// do warp from square to cosine weighted hemisphere
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
-			outgoing = UniformHemisphereSample(sample[0], sample[1]);//CosineSampleHemisphere(sample[0], sample[1]));
+			outgoing = /*UniformHemisphereSample(sample[0], sample[1]); */CosineSampleHemisphere(sample[0], sample[1]);
 			if (tangentSpaceIncoming.z < 0.f)
 			{
 				outgoing.z *= -1.f;
 			}
-			//printVec3("outgoingTangentSpace", outgoing);
 			outgoing = glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * outgoing;
-			//printVec3("incomingWorldSpace", incoming);
-			//printVec3("intersectWorldNormal", intersect.m_normal);
-			//printVec3("outgoingWorldSpace", outgoing);
-			return m_albedo / CUDART_PI_F;
+			// albedo / PI
+			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
 		}
 	}
 
-	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing, const glm::vec3& normal)
+	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing, const Intersect& intersect)
 	{
 		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 
@@ -164,7 +171,13 @@ struct BXDF
 		//TODO: add pdf for every other material type
 		if (m_type == BXDFTyp::DIFFUSE )
 		{
-			return /*glm::abs(glm::dot(outgoing, normal))*/1.f / CUDART_PI_F;
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
+			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
+			// cosine weighted hemisphere sampling: cosTheta / PI
+			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
+			// uniform hemisphere sampling: 1 / PI
+			//return CUDART_2_OVER_PI_F * 0.5f;
 		}
 	}
 };
@@ -800,34 +813,73 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window, Camera& camera)
+void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer)
 {
+	bool cameraMoved = false;
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(0);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(1);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(2);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(3);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(4);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(5);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(6);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(7);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(8);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(9);
+		cameraMoved = true;
+	}
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+	{
 		camera.ProcessKeyboard(10);
+		cameraMoved = true;
+	}
 	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
 		//saveToPPM
+	}
+	if (cameraMoved)
+	{
+		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
 	}
 }

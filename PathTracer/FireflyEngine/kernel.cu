@@ -206,7 +206,7 @@ __device__ glm::vec3 getBXDF(const Ray& incomingRay, const Intersect& intersect,
 
 __device__ float getPDF(const Ray& incomingRay, const glm::vec3& outgoingRayDirection, const Intersect& intersect, Geometry* geometries)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), -outgoingRayDirection, intersect.m_normal));
+	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), outgoingRayDirection, intersect));
 }
 
 __device__ Ray& generateRay(Camera camera, int x, int y)
@@ -246,11 +246,10 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 	//   2.a get bsdf and pdf
 	//   2.b get outgoing ray
 	//   2.c calculate thruput and calculate russian roulette
-	int iterations = 0;
-	glm::vec3 pixelColor(0.f, 0.f, 0.f);
-
 	Ray& ray = generateRay(camera, x, y);
 
+	int iterations = 0;
+	glm::vec3 pixelColor(0.f);
 	glm::vec3 thruput(1.f);
 
 	do
@@ -375,7 +374,7 @@ int main()
 	lightbxdfPlane->m_intensity = 2.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry->m_bxdf = diffusebxdfREDMesh;
+	triangleMeshGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	bottomPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
@@ -452,11 +451,10 @@ int main()
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
-	int maxIterations = 20;
-
+	int maxIterations = 3;
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
-		processInput(viewer->m_window, camera);
+		processInput(viewer->m_window, camera, viewer);
 		camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
 		//
@@ -485,9 +483,6 @@ int main()
 			0, viewer->interop->height, viewer->interop->width, 0,
 			GL_COLOR_BUFFER_BIT,
 			GL_NEAREST);
-
-		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
 
 		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
 
