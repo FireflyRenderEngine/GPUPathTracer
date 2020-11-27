@@ -531,9 +531,6 @@ cudaError_t pxl_interop_size_set(struct pxl_interop* const interop, const int wi
 		// resize rbo
 		glNamedRenderbufferStorage(interop->rb[index], GL_RGBA8, width, height);
 
-		// probe fbo status
-		// glCheckNamedFramebufferStatus(interop->fb[index],0);
-
 		// register rbo
 		cuda_err = cudaGraphicsGLRegisterImage(&interop->cgr[index],
 			interop->rb[index],
@@ -786,13 +783,14 @@ void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
 		}
 	}
 }
-typedef glm::vec<4, unsigned char, glm::defaultp>		cvec4;
-void saveToPPM(glm::vec3* pixels, int height, int width)
-{
-	glm::ivec4* pixels4 = new glm::ivec4[width * height];
 
-	glReadBuffer(GL_BACK);
-	glReadPixels(0, 0, width, height, GL_RGBA8, GL_INT, pixels4);
+void saveToPPM(GLFWViewer* viewer)
+{
+	int width = viewer->interop->width;
+	int height = viewer->interop->height;
+	uchar4* pixels4 = new uchar4[width * height];
+
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
 	std::ofstream renderFile;
 	renderFile.open("render.ppm");
 
@@ -800,7 +798,7 @@ void saveToPPM(glm::vec3* pixels, int height, int width)
 	renderFile << width << " " << height << std::endl;
 	renderFile << 255 << std::endl;
 
-	for (int i = 0; i < width * height; ++i)
+	for (int i = (width * height) - 1; i >=0; --i)
 	{
 		renderFile << static_cast<int>(pixels4[i].x) << " " << static_cast<int>(pixels4[i].y) << " " << static_cast<int>(pixels4[i].z) << std::endl;
 	}
@@ -875,7 +873,7 @@ void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer)
 	}
 	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
-		//saveToPPM
+		saveToPPM(viewer);
 	}
 	if (cameraMoved)
 	{
