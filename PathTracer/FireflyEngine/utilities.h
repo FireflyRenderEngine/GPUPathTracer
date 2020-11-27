@@ -36,6 +36,16 @@
         } \
     } while (0)
 
+__device__ void print(const char* label, float value)
+{
+	printf("%s: %f\n", label, value);
+}
+
+__device__ void printVec3(const char* label, glm::vec3 value)
+{
+	printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
+}
+
 // ------------------DATA CONTAINER STRUCTS------------------
 
 __device__ bool isZero(const glm::vec3& v)
@@ -54,11 +64,21 @@ __device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
 	return glm::vec3(x, y, sqrt(glm::max(0.0f, 1 - u1)));
 }
 
+__device__ glm::vec3 UniformHemisphereSample(float u1, float u2)
+{
+	const float r = sqrt(1.0f - u1 * u1);
+	const float phi = 2 * CUDART_PI_F * u2;
+
+	return glm::vec3(cos(phi) * r, sin(phi) * r, u1);
+}
+
 struct Intersect
 {
 	Intersect() = default;
 	glm::vec3 m_intersectionPoint;
 	glm::vec3 m_normal;
+	glm::vec3 m_tangent;
+	glm::vec3 m_bitangent;
 	float m_t{ 0.f };
 	bool m_hit{ false };
 	int geometryIndex{ -1 };
@@ -114,15 +134,24 @@ struct BXDF
 			   number, no offset */
 			curandState state1;
 			curandState state2;
+			curandState state3;
 			curand_init((unsigned long long)clock() + id, id, 0, &state1);
 			curand_init((unsigned long long)clock() + id + 3, id, 0, &state2);
-
 			sample[0] = curand_uniform(&state1);
 			sample[1] = curand_uniform(&state2);
-
 			// do warp from square to cosine weighted hemisphere
-
-			outgoing = glm::normalize(CosineSampleHemisphere(sample[0], sample[1]));
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
+			outgoing = UniformHemisphereSample(sample[0], sample[1]);//CosineSampleHemisphere(sample[0], sample[1]));
+			if (tangentSpaceIncoming.z < 0.f)
+			{
+				outgoing.z *= -1.f;
+			}
+			//printVec3("outgoingTangentSpace", outgoing);
+			outgoing = glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * outgoing;
+			//printVec3("incomingWorldSpace", incoming);
+			//printVec3("intersectWorldNormal", intersect.m_normal);
+			//printVec3("outgoingWorldSpace", outgoing);
 			return m_albedo / CUDART_PI_F;
 		}
 	}
@@ -135,7 +164,7 @@ struct BXDF
 		//TODO: add pdf for every other material type
 		if (m_type == BXDFTyp::DIFFUSE )
 		{
-			return glm::abs(glm::dot(incoming, normal)) / CUDART_PI_F;
+			return /*glm::abs(glm::dot(outgoing, normal))*/1.f / CUDART_PI_F;
 		}
 	}
 };
@@ -266,12 +295,14 @@ struct Ray
 		:m_origin(origin), m_direction(direction)
 	{
 	}
-	__device__ Ray& operator=(const Ray& otherRay) {
+	__device__ Ray& operator=(const Ray& otherRay) 
+	{
 		m_origin = otherRay.m_origin;
 		m_direction = otherRay.m_direction;
 		return *this;
 	}
-	__device__ Ray(const Ray& otherRay) {
+	__device__ Ray(const Ray& otherRay) 
+	{
 		m_origin = otherRay.m_origin;
 		m_direction = otherRay.m_direction;
 	}
@@ -527,8 +558,8 @@ void pxl_glfw_window_size_callback(GLFWwindow* window, int width, int height)
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 struct GLFWViewer 
 {
-	GLFWViewer(int windowWidth, int windowHeight, glm::vec3* pixels)
-		: m_windowWidth(windowWidth), m_windowHeight(windowHeight), m_pixels(pixels)
+	GLFWViewer(int windowWidth, int windowHeight)
+		: m_windowWidth(windowWidth), m_windowHeight(windowHeight)
 	{
 		glfwSetErrorCallback(glfw_error_callback);
 		// Init the viewer
@@ -658,275 +689,20 @@ struct GLFWViewer
 		// resize with initial window dimensions
 		cuda_err = pxl_interop_size_set(interop, width, height);
 
-		//
-		// SET USER POINTER AND CALLBACKS
-		//
 		glfwSetWindowUserPointer(m_window, interop);
-		//glfwSetKeyCallback(m_window, pxl_glfw_key_callback);
 		glfwSetFramebufferSizeCallback(m_window, pxl_glfw_window_size_callback);
 
-	}
-
-	void cleanupCuda()
-	{
-		if (pbo)
-		{
-			// unregister this buffer object with CUDA
-			cudaGraphicsUnregisterResource(pboCudaResource);
-
-			glBindBuffer(GL_ARRAY_BUFFER, pbo);
-			glDeleteBuffers(1, &pbo);
-
-			pbo = (GLuint)NULL;
-		}
-		if (m_texColorBuffer)
-		{
-			glDeleteTextures(1, &m_texColorBuffer);
-			m_texColorBuffer = (GLuint)NULL;
-		}
-	}
-
-	void Create() 
-	{
-		// We will initialize the quad data for rasterization now
-		static const GLfloat quadVertexData[] =
-		{
-			-1.0f, -1.0f, 0.0f,
-			 1.0f, -1.0f, 0.0f,
-			-1.0f,  1.0f, 0.0f,
-			-1.0f,  1.0f, 0.0f,
-			 1.0f, -1.0f, 0.0f,
-			 1.0f,  1.0f, 0.0f,
-		};
-
-		// Now we will initialze the OpenGL stuff for rendering a quad and the painting it with the texture
-		glGenVertexArrays(1, &m_VAO);
-		// 1. bind Vertex Array Object
-		glBindVertexArray(m_VAO);
-		// 2. copy our vertices array in a buffer for OpenGL to use
-		unsigned int VBO;
-		glGenBuffers(1, &VBO);
-		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertexData), quadVertexData, GL_STATIC_DRAW);
-		// 3. then set our vertex attributes pointers
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(0);
-
-		// Set the texture to be used to paint on the quad
-		glGenTextures(1, &m_texColorBuffer);
-		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
-
-		// set basic parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-		// Create texture data (3-component unsigned byte)
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, NULL);
-
-		// Compile the vertex and fragmnet shader and create a shader program
-		std::string programPath = R"(..\..\shaderResource\)";
-		std::string vertexShaderPath = programPath + R"(QuadVertexShader.glsl)";
-		std::string fragmentShaderPath = programPath + R"(QuadFragmentShader.glsl)";
-		unsigned int fragmentShader;
-		unsigned int vertexShader;
-
-		if (!CompileVertexShader(vertexShaderPath, vertexShader))
-		{
-			std::cout << "Error: compiling vertex shader at path : " << vertexShaderPath <<  std::endl;
-			return;
-		}
-		
-		if (!CompileFragmentShader(fragmentShaderPath, fragmentShader))
-		{
-			std::cout << "Error: loading fragmnet shader at path : " << fragmentShaderPath << std::endl;
-			return;
-		}
-
-		if (!CreateShaderProgram(vertexShader, fragmentShader))
-		{
-			std::cout << "Error: creating shader program";
-			return;
-		}
-
-		DeleteShaders(vertexShader, fragmentShader);
-
-		// Bind the shader program
-		glUseProgram(m_quadShaderProgram);
-		glBindVertexArray(m_VAO);
-		// Bind the texture
-		glBindTexture(GL_TEXTURE_2D, m_texColorBuffer);
-		//cudaGraphicsGLRegisterImage(&viewCudaResource, m_texColorBuffer, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
-		//cudaGraphicsGLRegisterImage(&g_CUDAGraphicsResource[0], m_texColorBuffer, GL_TEXTURE_2D, cudaGraphicsMapFlagsWriteDiscard);
-
-		// set up vertex data parameter
-		int num_texels = m_windowWidth * m_windowHeight;
-		int num_values = num_texels * 3;
-		int size_tex_data = sizeof(char) * num_values;
-
-		// Generate a buffer ID called a PBO (Pixel Buffer Object)
-		glGenBuffers(1, &pbo);
-
-		// Make this the current UNPACK buffer (OpenGL is state-based)
-		glBindBuffer(GL_ARRAY_BUFFER, pbo);
-
-		// Allocate data for the buffer. 4-channel 8-bit image
-		glBufferData(GL_ARRAY_BUFFER, size_tex_data, NULL, GL_DYNAMIC_COPY);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		cudaGraphicsGLRegisterBuffer(&pboCudaResource, pbo, cudaGraphicsRegisterFlagsWriteDiscard);
-		glActiveTexture(GL_TEXTURE0);
-	}
-
-	std::string GetShaderCode(std::string filePath)
-	{
-		// Read the Vertex Shader code from the file
-		std::string VertexShaderCode;
-		std::ifstream VertexShaderStream(filePath, std::ios::in);
-		if (VertexShaderStream.is_open())
-		{
-			std::stringstream sstr;
-			sstr << VertexShaderStream.rdbuf();
-			VertexShaderCode = sstr.str();
-			VertexShaderStream.close();
-		}
-		else
-		{
-			printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", filePath.c_str());
-			getchar();
-			return "";
-		}
-		return VertexShaderCode;
-	}
-
-	bool CompileFragmentShader(std::string fragmentShaderFilePath, unsigned int& fragmentShader)
-	{
-		bool success = false;
-
-		fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-		std::string fragmentShaderSource = GetShaderCode(fragmentShaderFilePath);
-
-		char const* fragmentSourcePointer = fragmentShaderSource.c_str();
-		glShaderSource(fragmentShader, 1, &fragmentSourcePointer, NULL);
-		glCompileShader(fragmentShader);
-
-		// Check Fragment Shader
-		GLint Result = GL_FALSE;
-		int InfoLogLength;
-		glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &Result);
-		glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
-		if (InfoLogLength > 0)
-		{
-			std::vector<char> fragmentShaderErrorMessage(InfoLogLength + 1);
-			glGetShaderInfoLog(fragmentShader, InfoLogLength, NULL, &fragmentShaderErrorMessage[0]);
-			return success;
-		}
-
-		success = true;
-		return success;
-	}
-
-	bool CompileVertexShader(std::string vertexShaderFilePath, unsigned int& vertexShader)
-	{
-		bool success = false;
-
-		vertexShader = glCreateShader(GL_VERTEX_SHADER);
-		std::string vertexShaderSource = GetShaderCode(vertexShaderFilePath);
-
-		char const* vertexSourcePointer = vertexShaderSource.c_str();
-		glShaderSource(vertexShader, 1, &vertexSourcePointer, NULL);
-		glCompileShader(vertexShader);
-
-		// Check Vertex Shader
-		GLint Result = GL_FALSE;
-		int InfoLogLength;
-		glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &Result);
-		glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &InfoLogLength);
-		if (InfoLogLength > 0) {
-			std::vector<char> vertexShaderErrorMessage(InfoLogLength + 1);
-			glGetShaderInfoLog(vertexShader, InfoLogLength, NULL, &vertexShaderErrorMessage[0]);
-			return success;
-		}
-
-		success = true;
-		return success;
-	}
-
-	bool CreateShaderProgram(unsigned int& vertexShader, unsigned int& fragmentShader)
-	{
-		bool success = false;
-
-		m_quadShaderProgram = glCreateProgram();
-		glAttachShader(m_quadShaderProgram, vertexShader);
-		glAttachShader(m_quadShaderProgram, fragmentShader);
-		glLinkProgram(m_quadShaderProgram);
-		GLint Result = GL_FALSE;
-		int InfoLogLength = 0;
-		glGetProgramiv(m_quadShaderProgram, GL_LINK_STATUS, &Result);
-		std::vector<char> shaderProgramErrorMessage(InfoLogLength + 1);
-		glGetShaderInfoLog(m_quadShaderProgram, InfoLogLength, NULL, &shaderProgramErrorMessage[0]);
-		if (InfoLogLength > 0)
-		{
-			return success;
-		}
-
-		success = true;
-		return success;
-	}
-
-	void DeleteShaders(unsigned int& vertexShader, unsigned int& fragmentShader)
-	{
-		glDeleteShader(vertexShader);
-		glDeleteShader(fragmentShader);
-	}
-
-	cudaGraphicsResource_t getPBOResource() const
-	{
-		return pboCudaResource;
-	}
-
-	GLuint getPBO() const
-	{
-		return pbo;
-	}
-
-	GLuint getTexture() const
-	{
-		return m_texColorBuffer;
-	}
-
-	void Draw() 
-	{
-		// Update the texture
-		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_FLOAT, m_pixels);
-
-		// Draw the Quad
-		glDrawArrays(GL_TRIANGLES, 0, 6);
-		//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 	}
 
 	~GLFWViewer() 
 	{
 		glfwTerminate();
 		glfwDestroyWindow(m_window);
-
-		// DO NOT DELETE PIXELS. IT IS MANAGED SOMEWHERE ELSE
 	}
-
-	// OGL data variables
-	unsigned int m_VAO;
-	unsigned int m_quadShaderProgram;
-	GLuint m_texColorBuffer;
-	GLuint pbo;
-
-	cudaGraphicsResource_t pboCudaResource;
 
 	// This is the quad on the screen that will be used for showing the path traced image
 	int m_windowWidth, m_windowHeight;
 	GLFWwindow* m_window;
-
-	// Pixels used as a texture to paint the quad
-	glm::vec3* m_pixels;
 
 	cudaStream_t stream;
 	cudaEvent_t  event;
@@ -934,13 +710,6 @@ struct GLFWViewer
 	cudaError_t cuda_err;
 
 	struct pxl_interop* interop;
-
-	// The CUDA Graphics Resource is used to map the OpenGL texture to a CUDA
-	// buffer that can be used in a CUDA kernel.
-	// We need 2 resource: One will be used to map to the color attachment of the
-	//   framebuffer and used read-only from the CUDA kernel (SRC_BUFFER), 
-	//   the second is used to write the postprocess effect to (DST_BUFFER).
-	cudaGraphicsResource_t g_CUDAGraphicsResource[2] = { 0, 0 };
 };
 
 // ------------------UTILITY FUNCTIONS------------------
@@ -1031,7 +800,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window, Camera& camera, glm::vec3* pixels)
+void processInput(GLFWwindow* window, Camera& camera)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
@@ -1059,6 +828,6 @@ void processInput(GLFWwindow* window, Camera& camera, glm::vec3* pixels)
 		camera.ProcessKeyboard(10);
 	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
-		saveToPPM(pixels, camera.m_screenHeight, camera.m_screenWidth);
+		//saveToPPM
 	}
 }

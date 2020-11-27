@@ -26,11 +26,43 @@ __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect&
 			intersect.m_t = t;
 			intersect.m_intersectionPoint = P;
 			intersect.m_normal = plane.m_normal;
+			intersect.m_tangent = { 1.f, 0.f, 0.f };
+			intersect.m_bitangent = { 0.f, 1.f, 0.f };
 			return true;
 		}
 		return false;
 	}
 	return false;
+}
+
+/*******************************************************************************
+ * Calculates an orthogonal coordinate axis system from a single normalized 
+ * vector.
+ * We use the normal from the intersection object to calculate its tangent
+ * and bitangent vectors. We do this by assigning one of the x,y,z components
+ * to 0. This assumption is based off the fact that the dot product of 2 
+ * orthogonal vectors is 0. so if "a" and "b" are the 2 vectors, 
+ * a.x*b.x + a.y*b.y + a.z+b.z = 0. If we make the assumption that 
+ * (in local space) b.y is 0, then for a.x*bx + a.z*b.z to be zero we can assign
+ * b.x as -a.z and b.z as a.x, then a.x*(-a.z) + a.z*a.x will be 0.
+ * this forms the tangent. To get the bitangent, all we need to do is get the
+ * cross product between normal and tangent.
+ ******************************************************************************/
+__device__ void calculateCoordinateAxes(Intersect& intersect)
+{
+	glm::vec3& normal = intersect.m_normal;
+	glm::vec3& tangent = intersect.m_tangent;
+	glm::vec3& bitangent = intersect.m_bitangent;
+
+	if (normal.x > normal.y)
+	{
+		tangent = glm::normalize(glm::vec3(-normal.z, 0.f, normal.x));
+	}
+	else
+	{
+		tangent = glm::normalize(glm::vec3(0.f, -normal.z, normal.y));
+	}
+	bitangent = glm::normalize(glm::cross(normal, tangent));
 }
 
 // fast Triangle intersection : https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf
@@ -88,6 +120,7 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 		float wv2 = ((vertex2.y - vertex0.y) * (intersectPoint.x - vertex2.x) + (vertex0.x - vertex2.x) * (intersectPoint.y - vertex2.y)) / denom;
 		float wv3 = 1 - wv1 - wv2;
 		intersect.m_normal = glm::normalize((wv1 * triangle.m_n0) + (wv2 * triangle.m_n1) + (wv3 * triangle.m_n2));
+		calculateCoordinateAxes(intersect);
 		return true;
 	}
 	else // This means that there is a line intersection but not a ray intersection.
@@ -104,6 +137,8 @@ __device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Inte
 	if (distanceOfPOI < tMax)
 	{
 		intersectOut.m_normal = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_normal, 0.f)));
+		intersectOut.m_tangent = glm::normalize(glm::vec3(modelMatrix * glm::vec4(objectSpaceIntersect.m_tangent, 0.f)));
+		intersectOut.m_bitangent = glm::normalize(glm::vec3(modelMatrix * glm::vec4(objectSpaceIntersect.m_bitangent, 0.f)));
 		intersectOut.m_intersectionPoint = worldPOI;
 		intersectOut.m_t = distanceOfPOI;
 		intersectOut.m_hit = true;
@@ -171,7 +206,7 @@ __device__ glm::vec3 getBXDF(const Ray& incomingRay, const Intersect& intersect,
 
 __device__ float getPDF(const Ray& incomingRay, const glm::vec3& outgoingRayDirection, const Intersect& intersect, Geometry* geometries)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), outgoingRayDirection, intersect.m_normal));
+	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), -outgoingRayDirection, intersect.m_normal));
 }
 
 __device__ Ray& generateRay(Camera camera, int x, int y)
@@ -193,8 +228,8 @@ __device__ Ray& generateRay(Camera camera, int x, int y)
 
 __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int maxIterations)
 {
-	int x = blockIdx.x* blockDim.x + threadIdx.x;
-	int y = blockIdx.y* blockDim.y + threadIdx.y;
+	int x = /*400;// */blockIdx.x* blockDim.x + threadIdx.x;
+	int y = /*400;// */blockIdx.y* blockDim.y + threadIdx.y;
 
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
@@ -213,6 +248,7 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 	//   2.c calculate thruput and calculate russian roulette
 	int iterations = 0;
 	glm::vec3 pixelColor(0.f, 0.f, 0.f);
+
 	Ray& ray = generateRay(camera, x, y);
 
 	glm::vec3 thruput(1.f);
@@ -222,7 +258,6 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 		Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
 		if (!intersect.m_hit)
 		{
-			pixelColor = glm::vec3(0.1, 0.4, 0.2); //REMOVE ME
 			thruput *= 0.0f;
 			break;
 		}
@@ -235,37 +270,31 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 			if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 			{
 				// add to thruput and exit since we hit an emitter
-				pixelColor += thruput * bxdf;// do abscos
-				//thruput *= 0.0f;
+				pixelColor += thruput * bxdf;
 				break;
 			}
 
 			float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
 
-
-			// pixelColor += emitted light + integral of (bxdf/pdf)
-			if (pdf > 0.001)
+			if (pdf > 0.0001f)
 			{
-				float dotProd = glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal));
-				//printf("dotProd : %f\n", dotProd);
-				thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
+				float dotProd = glm::abs(glm::dot(outgoingRay.m_direction, intersect.m_normal));
+				thruput *= dotProd * (bxdf / pdf);
 			}
 
-			//thruput *= glm::abs(glm::dot(-glm::normalize(outgoingRay.m_direction), intersect.m_normal)) * (bxdf / pdf);
-
-
 			// set the next ray for iteration
-			glm::vec3 originOffset = 0.000005f * intersect.m_normal;
+			glm::vec3 originOffset = 0.005f * intersect.m_normal;
 			outgoingRay.m_origin += glm::dot(outgoingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+		
+			
 			ray = outgoingRay;
 		}
-		iterations--;
-	} while (iterations > 0);
+		iterations++;
+	} while (iterations < maxIterations);
 	
-	pixelColor += thruput;
-	if (maxIterations - iterations > 0)
+	if (iterations > 0)
 	{
-		pixelColor /= (float)(maxIterations - iterations);
+		pixelColor /= (float)(iterations);
 	}
 	pixelColor = glm::abs(pixelColor);
 	surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f),
@@ -298,9 +327,8 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 	dim3 gridSize;
 	gridSize.x = ((width + blockSize.x - 1) / blockSize.x);
 	gridSize.y = ((height + blockSize.y -1) / blockSize.y);
-	const int blocks = (width * height + 256 - 1) / 256;
 	
-	launchPathTrace << <gridSize, blockSize , 0, stream >> > (geom, camera, numGeom, maxIterations);
+	launchPathTrace << </*1,1*/gridSize, blockSize , 0, stream >> > (geom, camera, numGeom, maxIterations);
 
 	return cudaSuccess;
 }
@@ -311,18 +339,24 @@ int main()
 
 	std::vector<Triangle> trianglesInMesh;
 	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0), glm::vec3(0.0f, 180.0f, 0.0f), glm::vec3(1.0f), trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0.f), glm::vec3(0.0f), glm::vec3(1.5f), trianglesInMesh);
 
-	Geometry*  topPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 5.f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry* topPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 7.4f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* leftPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
+	Geometry* bottomPlaneWhiteGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
+	Geometry* topPlaneWhiteGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
+	Geometry* backPlaneWhiteGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -7.5f), glm::vec3(0.f), glm::vec3(15.f));
+	Geometry* leftPlaneRedGeometry = new Geometry(GeometryType::PLANE, glm::vec3(-7.5f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(15.f));
+	Geometry* rightPlaneGreenGeometry = new Geometry(GeometryType::PLANE, glm::vec3(7.5f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(15.f));
+
 
 	BXDF* diffusebxdfREDMesh = new BXDF();
 	diffusebxdfREDMesh->m_type = BXDFTyp::DIFFUSE;
 	diffusebxdfREDMesh->m_albedo = { 1.f, 0.f, 0.f };
 
-	BXDF* diffusebxdGREENfMesh = new BXDF();
-	diffusebxdGREENfMesh->m_type = BXDFTyp::DIFFUSE;
-	diffusebxdGREENfMesh->m_albedo = { 0.f, 1.f, 0.f };
+	BXDF* diffusebxdfGREENMesh = new BXDF();
+	diffusebxdfGREENMesh->m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfGREENMesh->m_albedo = { 0.f, 1.f, 0.f };
 
 	BXDF* diffusebxdfBLUEMesh = new BXDF();
 	diffusebxdfBLUEMesh->m_type = BXDFTyp::DIFFUSE;
@@ -332,26 +366,38 @@ int main()
 	diffusebxdfPURPLEMesh->m_type = BXDFTyp::DIFFUSE;
 	diffusebxdfPURPLEMesh->m_albedo = { 1.f, 0.f, 1.f };
 
+	BXDF* diffusebxdfWHITEMesh = new BXDF();
+	diffusebxdfWHITEMesh->m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfWHITEMesh->m_albedo = { 1.f, 1.f, 1.f };
+
 	BXDF* lightbxdfPlane = new BXDF();
 	lightbxdfPlane->m_type = BXDFTyp::EMITTER;
 	lightbxdfPlane->m_intensity = 2.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	triangleMeshGeometry->m_bxdf = diffusebxdfREDMesh;
+	bottomPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
+	backPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
+	topPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
+	leftPlaneRedGeometry->m_bxdf = diffusebxdfREDMesh;
+	rightPlaneGreenGeometry->m_bxdf = diffusebxdfGREENMesh;
 	topPlaneLightGeometry->m_bxdf = lightbxdfPlane;
 	leftPlaneLightGeometry->m_bxdf = lightbxdfPlane;
-
+	
 	std::vector<Geometry> geometries;
 	geometries.push_back(*triangleMeshGeometry);
 	geometries.push_back(*topPlaneLightGeometry);
-	geometries.push_back(*leftPlaneLightGeometry);
+	//geometries.push_back(*leftPlaneLightGeometry);
+	geometries.push_back(*bottomPlaneWhiteGeometry);
+	geometries.push_back(*backPlaneWhiteGeometry);
+	geometries.push_back(*topPlaneWhiteGeometry);
+	geometries.push_back(*rightPlaneGreenGeometry);
+	geometries.push_back(*leftPlaneRedGeometry);
 
 	// TODO: Load scene from file
 	int windowWidth  = 800;
 	int windowHeight = 800;
 	int cameraResolution = windowWidth * windowHeight;
-
-	int samplesPerPixel = 1;
 
 	// First we will copy the base geometry object to device memory
 	state.d_geometry = nullptr;
@@ -385,12 +431,6 @@ int main()
 		}
 	}
 
-	state.d_raysToTrace = 0;
-	cudaMalloc((void**)&(state.d_raysToTrace), cameraResolution * samplesPerPixel * sizeof(unsigned int));
-	cudaCheckErrors("cudaMalloc rays fail");
-
-	glm::vec3* pixels = new glm::vec3[cameraResolution];
-
 	Camera camera;
 	camera.m_position = glm::vec3(0.f, 0.f, 15.f);
 	camera.m_forward = glm::vec3(0.f, 0.f, -1.f);
@@ -406,18 +446,17 @@ int main()
 
 	camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
-	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight, pixels);
-	//viewer->Create();
+	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight);
 
 	state.d_camera = nullptr;
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
-	int maxIterations = 3;
+	int maxIterations = 20;
 
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
-		processInput(viewer->m_window, camera, pixels);
+		processInput(viewer->m_window, camera);
 		camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
 		//
@@ -449,7 +488,7 @@ int main()
 
 		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
-		// pxl_interop_clear(interop);
+
 		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
 
 
@@ -461,9 +500,7 @@ int main()
 	glfwTerminate();
 
 	cudaFree(state.d_geometry);
-	delete[] pixels;
 	delete viewer;
-	//delete triangleMeshGeometry;
-	//cudaFree(hostTriangleData);
+
 	return 0;
 }

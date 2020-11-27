@@ -15,6 +15,5 @@ struct PathTracerState
 	Geometry* d_geometry{ nullptr };
 	glm::vec3* d_pixels{ nullptr };
 	Camera* d_camera{ nullptr };
-	unsigned int d_raysToTrace{ 0 };
 	unsigned int d_raytracableObjects{ 0 };
 };
