@@ -139,20 +139,20 @@ struct BXDF
 			// sample a point on hemisphere to return an outgoing ray
 			glm::vec2 sample;
 
-			int id = threadIdx.x + blockIdx.x * blockDim.x;
+			int x = blockIdx.x * blockDim.x + threadIdx.x;
 			/* Each thread gets same seed, a different sequence
 			   number, no offset */
 			curandState state1;
 			curandState state2;
-			curandState state3;
-			curand_init((unsigned long long)clock() + id, id, 0, &state1);
-			curand_init((unsigned long long)clock() + id + 3, id, 0, &state2);
+			curand_init((unsigned long long)clock() + x, x, 0, &state1);
+			curand_init((unsigned long long)clock() + x + 3, x, 0, &state2);
 			sample[0] = curand_uniform(&state1);
 			sample[1] = curand_uniform(&state2);
 			// do warp from square to cosine weighted hemisphere
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
-			outgoing = /*UniformHemisphereSample(sample[0], sample[1]); */CosineSampleHemisphere(sample[0], sample[1]);
+			outgoing = UniformHemisphereSample(sample[0], sample[1]); 
+			//outgoing = CosineSampleHemisphere(sample[0], sample[1]);
 			if (tangentSpaceIncoming.z < 0.f)
 			{
 				outgoing.z *= -1.f;
@@ -171,13 +171,15 @@ struct BXDF
 		//TODO: add pdf for every other material type
 		if (m_type == BXDFTyp::DIFFUSE )
 		{
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+			glm::mat3 worldToLocal = glm::inverse(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
+			
 			// cosine weighted hemisphere sampling: cosTheta / PI
-			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
+			//return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
+			
 			// uniform hemisphere sampling: 1 / PI
-			//return CUDART_2_OVER_PI_F * 0.5f;
+			return CUDART_2_OVER_PI_F * 0.5f;
 		}
 	}
 };

@@ -137,8 +137,8 @@ __device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Inte
 	if (distanceOfPOI < tMax)
 	{
 		intersectOut.m_normal = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_normal, 0.f)));
-		intersectOut.m_tangent = glm::normalize(glm::vec3(modelMatrix * glm::vec4(objectSpaceIntersect.m_tangent, 0.f)));
-		intersectOut.m_bitangent = glm::normalize(glm::vec3(modelMatrix * glm::vec4(objectSpaceIntersect.m_bitangent, 0.f)));
+		intersectOut.m_tangent = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_tangent, 0.f)));
+		intersectOut.m_bitangent = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_bitangent, 0.f)));
 		intersectOut.m_intersectionPoint = worldPOI;
 		intersectOut.m_t = distanceOfPOI;
 		intersectOut.m_hit = true;
@@ -213,12 +213,18 @@ __device__ Ray& generateRay(Camera camera, int x, int y)
 {
 	Ray ray;
 
-	// TODO: add stratified samples
 	// TODO: add depth of field
 	ray.m_origin = camera.m_position;
 
-	float Px = (x / camera.m_screenWidth) * 2.f - 1.f;
-	float Py = 1.f - (y / camera.m_screenHeight) * 2.f;
+	curandState state1;
+	curandState state2;
+	curand_init((unsigned long long)clock() + x, x, 0, &state1);
+	curand_init((unsigned long long)clock() + x + 5, x, 0, &state2);
+	float jx = curand_uniform(&state1);
+	float jy = curand_uniform(&state2);
+
+	float Px = ((x + jx) / camera.m_screenWidth) * 2.f - 1.f;
+	float Py = 1.f - ((y + jy) / camera.m_screenHeight) * 2.f;
 
 	glm::vec3 wLookAtPoint = camera.m_invViewProj * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
 
@@ -226,10 +232,15 @@ __device__ Ray& generateRay(Camera camera, int x, int y)
 	return ray;
 }
 
+__device__ bool isBlack(glm::vec3 color)
+{
+	return color.x <= 0.0001f && color.y <= 0.0001f && color.z <= 0.0001f;
+}
+
 __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int maxIterations)
 {
-	int x = /*400;// */blockIdx.x* blockDim.x + threadIdx.x;
-	int y = /*400;// */blockIdx.y* blockDim.y + threadIdx.y;
+	int x = /*200;*/ blockIdx.x* blockDim.x + threadIdx.x;
+	int y = /*400;*/ blockIdx.y* blockDim.y + threadIdx.y;
 
 	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
 	int pixelIndex = y * camera.m_screenWidth + x;
@@ -246,57 +257,110 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 	//   2.a get bsdf and pdf
 	//   2.b get outgoing ray
 	//   2.c calculate thruput and calculate russian roulette
-	Ray& ray = generateRay(camera, x, y);
 
-	int iterations = 0;
-	glm::vec3 pixelColor(0.f);
-	glm::vec3 thruput(1.f);
+	glm::vec3 finalPixelColor(0.f);
 
-	do
+	uchar4 previousPixelColor = surf2Dread<uchar4>(surf, x * sizeof(uchar4), y, cudaBoundaryModeZero);
+
+	finalPixelColor.x = previousPixelColor.x / 255.f;
+	finalPixelColor.y = previousPixelColor.y / 255.f;
+	finalPixelColor.z = previousPixelColor.z / 255.f;
+
+	int samplesPerPixel = 1;
+
+	int samplesPerPixelThatContributed = 0;
+
+	glm::vec3 pixelColorPerPixel(0.f);
+	//print("readPreviousPixelColor", finalPixelColor);
+	
+	while(samplesPerPixel <= 2)
 	{
-		Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
-		if (!intersect.m_hit)
-		{
-			thruput *= 0.0f;
-			break;
-		}
-		else
-		{
-			Ray outgoingRay;
-			outgoingRay.m_origin = intersect.m_intersectionPoint;
+		Ray& ray = generateRay(camera, x, y);
+		glm::vec3 pixelColorPerSample(0.f);
+		int iterations = 0;
 
-			glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
-			if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+		glm::vec3 thruput(1.f);
+
+		do
+		{
+			Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
+			if (!intersect.m_hit)
 			{
-				// add to thruput and exit since we hit an emitter
-				pixelColor += thruput * bxdf;
 				break;
 			}
-
-			float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
-
-			if (pdf > 0.0001f)
+			else
 			{
-				float dotProd = glm::abs(glm::dot(outgoingRay.m_direction, intersect.m_normal));
-				thruput *= dotProd * (bxdf / pdf);
-			}
+				Ray outgoingRay;
+				outgoingRay.m_origin = intersect.m_intersectionPoint;
 
-			// set the next ray for iteration
-			glm::vec3 originOffset = 0.005f * intersect.m_normal;
-			outgoingRay.m_origin += glm::dot(outgoingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+				glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
+				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+				{
+					// add to thruput and exit since we hit an emitter
+					pixelColorPerSample += thruput * bxdf;
+					//print("thruputWhenWeHitLight", thruput);
+					if (iterations > 0)
+					{
+						pixelColorPerSample /= (float)(iterations);
+					}
+					samplesPerPixelThatContributed++;
+					//print("pixelColorPerSample", pixelColorPerSample);
+					//print("iterations", iterations);
+					break;
+				}
+
+				float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
+
+				if (pdf > 0.0001f)
+				{
+					float dotProd = glm::abs(glm::dot(outgoingRay.m_direction, intersect.m_normal));
+					//print("dotProd", dotProd);
+					thruput *= dotProd * (bxdf / pdf);
+					//print("thruputBeforeAdding", thruput);
+				}
+				else
+				{
+					break;
+				}
+				// set the next ray for iteration
+				glm::vec3 originOffset = 0.005f * intersect.m_normal;
+				outgoingRay.m_origin += glm::dot(outgoingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+
+
+				ray = outgoingRay;
+			}
+			iterations++;
+		} while (iterations < maxIterations);
+
+		pixelColorPerPixel += pixelColorPerSample;
+		//print("CumulativePixelColorPerPixel", pixelColorPerPixel);
 		
-			
-			ray = outgoingRay;
-		}
-		iterations++;
-	} while (iterations < maxIterations);
-	
-	if (iterations > 0)
-	{
-		pixelColor /= (float)(iterations);
+		samplesPerPixel++;
+		
 	}
-	pixelColor = glm::abs(pixelColor);
-	surf2Dwrite(make_uchar4(pixelColor[0] * 255.f, pixelColor[1] * 255.f, pixelColor[2] * 255.f, 255.f),
+	samplesPerPixel--;
+	
+	if(samplesPerPixelThatContributed > 0)
+	{
+		pixelColorPerPixel /= (float)(samplesPerPixelThatContributed);
+	}
+	
+	//print("AveragePixelColorPerPixel", pixelColorPerPixel);
+	
+	if (!isBlack(finalPixelColor) && !isBlack(pixelColorPerPixel))
+	{
+		finalPixelColor = (finalPixelColor + pixelColorPerPixel) / 2.f;
+	}
+	else if(isBlack(finalPixelColor) && !isBlack(pixelColorPerPixel))
+	{
+		finalPixelColor = pixelColorPerPixel;
+	}
+	//print("writeFinalPixelColor", finalPixelColor);
+	
+	// clamp the final rgb color [0, 1]
+	finalPixelColor = glm::vec3(glm::clamp(finalPixelColor.x, 0.f, 1.f), glm::clamp(finalPixelColor.y, 0.f, 1.f), glm::clamp(finalPixelColor.z, 0.f, 1.f));
+	
+	surf2Dwrite(make_uchar4(finalPixelColor[0] * 255.f, finalPixelColor[1] * 255.f, finalPixelColor[2] * 255.f, 255.f),
 		surf,
 		x * sizeof(uchar4),
 		y,
@@ -371,10 +435,10 @@ int main()
 
 	BXDF* lightbxdfPlane = new BXDF();
 	lightbxdfPlane->m_type = BXDFTyp::EMITTER;
-	lightbxdfPlane->m_intensity = 2.0f;
+	lightbxdfPlane->m_intensity = 1.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry->m_bxdf = diffusebxdfWHITEMesh;
+	triangleMeshGeometry->m_bxdf = diffusebxdfBLUEMesh;
 	bottomPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
@@ -451,7 +515,7 @@ int main()
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
-	int maxIterations = 3;
+	int maxIterations = 15;
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
 		processInput(viewer->m_window, camera, viewer);
@@ -484,7 +548,7 @@ int main()
 			GL_COLOR_BUFFER_BIT,
 			GL_NEAREST);
 
-		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
+		//viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
 
 
 		glfwSwapBuffers(viewer->m_window);
