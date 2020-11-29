@@ -58,9 +58,9 @@ __device__ void print(const char* label, uchar4 value)
 
 // ------------------DATA CONTAINER STRUCTS------------------
 
-__device__ bool isZero(const glm::vec3& v)
+__device__ bool isBlack(glm::vec3 color)
 {
-	return v.x == 0 && v.y == 0 && v.z == 0;
+	return color.x <= 0.0001f && color.y <= 0.0001f && color.z <= 0.0001f;
 }
 
 __device__ glm::vec2 ConcentricSampleDisk(float u1, float u2) {
