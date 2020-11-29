@@ -83,6 +83,7 @@ __device__ glm::vec2 ConcentricSampleDisk(float u1, float u2) {
 
 __device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
 {
+	// TODO : Remove comments after testing
 	//const float r = sqrt(u1);
 	//const float theta = 2 * CUDART_PI_F * u2;
 
@@ -139,7 +140,7 @@ struct BXDF
 	float m_intensity{ -1 };
 	glm::vec3 m_transmittanceColor{ -1,-1,-1 };
 	
-	__device__ glm::vec3 bsdf(const glm::vec3& incoming, glm::vec3& outgoing, const Intersect& intersect)
+	__device__ glm::vec3 bsdf(const glm::vec3& incoming, glm::vec3& outgoing, const Intersect& intersect, int depth)
 	{
 		//ASSUMPTION: incoming vector points away from the point of intersection
 
@@ -165,11 +166,9 @@ struct BXDF
 			/* Each thread gets same seed, a different sequence
 			   number, no offset */
 			curandState state1;
-			curandState state2;
 			curand_init((unsigned long long)clock() + x, x, 0, &state1);
-			curand_init((unsigned long long)clock() + x + 3, x, 0, &state2);
 			sample[0] = curand_uniform(&state1);
-			sample[1] = curand_uniform(&state2);
+			sample[1] = curand_uniform(&state1);
 			// do warp from square to cosine weighted hemisphere
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
@@ -193,15 +192,15 @@ struct BXDF
 		//TODO: add pdf for every other material type
 		if (m_type == BXDFTyp::DIFFUSE )
 		{
-			glm::mat3 worldToLocal = glm::inverse(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
 			
 			// cosine weighted hemisphere sampling: cosTheta / PI
 			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
 			
-			// uniform hemisphere sampling: 1 / PI
-			//return CUDART_2_OVER_PI_F * 0.5f;
+			// uniform hemisphere sampling: 1 / 2*PI
+			//return CUDART_2_OVER_PI_F * 0.25f;
 		}
 	}
 };
@@ -835,7 +834,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer)
+void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& iterations)
 {
 	bool cameraMoved = false;
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -903,5 +902,6 @@ void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer)
 	{
 		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
+		iterations = 1;
 	}
 }

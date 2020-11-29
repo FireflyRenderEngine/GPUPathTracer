@@ -24,9 +24,6 @@
   <ItemGroup>
     <Compile Remove="Migrations\**" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="kernel.cu" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{CD75BDAD-277F-40BE-A2C1-B31DDA8EED48}</ProjectGuid>
     <RootNamespace>FireflyEngine</RootNamespace>
