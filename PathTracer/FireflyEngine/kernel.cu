@@ -26,43 +26,11 @@ __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect&
 			intersect.m_t = t;
 			intersect.m_intersectionPoint = P;
 			intersect.m_normal = plane.m_normal;
-			intersect.m_tangent = { 1.f, 0.f, 0.f };
-			intersect.m_bitangent = { 0.f, 1.f, 0.f };
 			return true;
 		}
 		return false;
 	}
 	return false;
-}
-
-/*******************************************************************************
- * Calculates an orthogonal coordinate axis system from a single normalized 
- * vector.
- * We use the normal from the intersection object to calculate its tangent
- * and bitangent vectors. We do this by assigning one of the x,y,z components
- * to 0. This assumption is based off the fact that the dot product of 2 
- * orthogonal vectors is 0. so if "a" and "b" are the 2 vectors, 
- * a.x*b.x + a.y*b.y + a.z+b.z = 0. If we make the assumption that 
- * (in local space) b.y is 0, then for a.x*bx + a.z*b.z to be zero we can assign
- * b.x as -a.z and b.z as a.x, then a.x*(-a.z) + a.z*a.x will be 0.
- * this forms the tangent. To get the bitangent, all we need to do is get the
- * cross product between normal and tangent.
- ******************************************************************************/
-__device__ void calculateCoordinateAxes(Intersect& intersect)
-{
-	glm::vec3& normal = intersect.m_normal;
-	glm::vec3& tangent = intersect.m_tangent;
-	glm::vec3& bitangent = intersect.m_bitangent;
-
-	if (normal.x > normal.y)
-	{
-		tangent = glm::normalize(glm::vec3(-normal.z, 0.f, normal.x));
-	}
-	else
-	{
-		tangent = glm::normalize(glm::vec3(0.f, -normal.z, normal.y));
-	}
-	bitangent = glm::normalize(glm::cross(normal, tangent));
 }
 
 // fast Triangle intersection : https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf
@@ -120,7 +88,6 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 		float wv2 = ((vertex2.y - vertex0.y) * (intersectPoint.x - vertex2.x) + (vertex0.x - vertex2.x) * (intersectPoint.y - vertex2.y)) / denom;
 		float wv3 = 1 - wv1 - wv2;
 		intersect.m_normal = glm::normalize((wv1 * triangle.m_n0) + (wv2 * triangle.m_n1) + (wv3 * triangle.m_n2));
-		calculateCoordinateAxes(intersect);
 		return true;
 	}
 	else // This means that there is a line intersection but not a ray intersection.
@@ -136,9 +103,7 @@ __device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Inte
 	float distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
 	if (distanceOfPOI < tMax)
 	{
-		intersectOut.m_normal = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_normal, 0.f)));
-		intersectOut.m_tangent = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_tangent, 0.f)));
-		intersectOut.m_bitangent = glm::normalize(glm::vec3(invTransModelMatrix * glm::vec4(objectSpaceIntersect.m_bitangent, 0.f)));
+		intersectOut.m_normal = objectSpaceIntersect.m_normal;
 		intersectOut.m_intersectionPoint = worldPOI;
 		intersectOut.m_t = distanceOfPOI;
 		intersectOut.m_hit = true;
@@ -196,17 +161,16 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 			printf("No such Geometry implemented yet!");
 		}
 	}
+	if (intersectOut.m_hit)
+	{
+		intersectOut.m_normal = glm::normalize(glm::vec3(geometries[intersectOut.geometryIndex].m_invTransModelMatrix * glm::vec4(intersectOut.m_normal, 0.f)));
+	}
 	return intersectOut;
 }
 
-__device__ glm::vec3 getBXDF(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries, int depth)
+__device__ glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& intersect, glm::vec3& incomingRayDirection, Geometry* geometries, float& pdf, int depth)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->bsdf((-incomingRay.m_direction), outgoingRayDirection, intersect, depth));
-}
-
-__device__ float getPDF(const Ray& incomingRay, const glm::vec3& outgoingRayDirection, const Intersect& intersect, Geometry* geometries)
-{
-	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), outgoingRayDirection, intersect));
+	return (geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), incomingRayDirection, intersect, pdf, depth));
 }
 
 __device__ Ray& generateRay(Camera camera, int x, int y, int iterations)
@@ -232,7 +196,14 @@ __device__ Ray& generateRay(Camera camera, int x, int y, int iterations)
 	return ray;
 }
 
-__global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int iterations, glm::vec3* d_pixelColor)
+__global__ void launchPathTrace(
+	Geometry* geometries, 
+	Camera camera, 
+	int numberOfGeometries, 
+	int iterations,
+	int maxDepth,
+	int totalSamplesPerPixel,
+	glm::vec3* d_pixelColor)
 {
 	int x = /*200; */blockIdx.x* blockDim.x + threadIdx.x;
 	int y = /*400; */blockIdx.y* blockDim.y + threadIdx.y;
@@ -270,28 +241,28 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 
 	glm::vec3 pixelColorPerPixel(0.f);
 	
-	int maxDepth = 5;
-	int totalSamplesPerPixel = 16;
 	while(samplesPerPixel <= totalSamplesPerPixel)
 	{
-		Ray& ray = generateRay(camera, x, y, iterations + samplesPerPixel);
+		Ray& outgoingRay = generateRay(camera, x, y, iterations + samplesPerPixel);
 		glm::vec3 pixelColorPerSample(0.f);
 		int depth = 0;
 		glm::vec3 thruput(1.f);
 
 		do
 		{
-			Intersect intersect = intersectRays(ray, geometries, numberOfGeometries);
+			Intersect intersect = intersectRays(outgoingRay, geometries, numberOfGeometries);
 			if (!intersect.m_hit)
 			{
 				break;
 			}
 			else
 			{
-				Ray outgoingRay;
-				outgoingRay.m_origin = intersect.m_intersectionPoint;
+				Ray incomingRay;
+				incomingRay.m_origin = intersect.m_intersectionPoint;
 
-				glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries, depth);
+				float pdf;
+				// getBXDF returns 3 things: the bsdf, pdf of that bsdf sample, and the new sampled direction
+				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth);
 				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 				{
 					
@@ -301,11 +272,9 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 					break;
 				}
 
-				float pdf = getPDF(ray, outgoingRay.m_direction, intersect, geometries);
-
 				if (pdf > 0.0001f)
 				{
-					float dotProd = glm::abs(glm::dot(outgoingRay.m_direction, intersect.m_normal));
+					float dotProd = glm::abs(glm::dot(incomingRay.m_direction, intersect.m_normal));
 					thruput *= dotProd * (bxdf / pdf);
 				}
 				else
@@ -314,9 +283,9 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 				}
 				// set the next ray for iteration
 				glm::vec3 originOffset = 0.005f * intersect.m_normal;
-				outgoingRay.m_origin += glm::dot(outgoingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+				incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
 
-				ray = outgoingRay;
+				outgoingRay = incomingRay;
 			}
 			depth++;
 		} while (depth < maxDepth);
@@ -355,6 +324,8 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 	Camera camera,
 	int numGeom,
 	int iterations,
+	int maxDepth,
+	int samplesPerPixel,
 	glm::vec3* d_pixelColor)
 {
 	cudaError_t cuda_err;
@@ -371,7 +342,7 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 	gridSize.x = ((width + blockSize.x - 1) / blockSize.x);
 	gridSize.y = ((height + blockSize.y -1) / blockSize.y);
 	
-	launchPathTrace << </*1,1*/gridSize, blockSize, 0, stream >> > (geom, camera, numGeom, iterations, d_pixelColor);
+	launchPathTrace << </*1,1*/gridSize, blockSize, 0, stream >> > (geom, camera, numGeom, iterations, maxDepth, samplesPerPixel, d_pixelColor);
 
 	return cudaSuccess;
 }
@@ -415,7 +386,7 @@ int main()
 
 	BXDF* lightbxdfPlane = new BXDF();
 	lightbxdfPlane->m_type = BXDFTyp::EMITTER;
-	lightbxdfPlane->m_intensity = 10.0f;
+	lightbxdfPlane->m_intensity = 5.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	triangleMeshGeometry->m_bxdf = diffusebxdfWHITEMesh;
@@ -500,9 +471,16 @@ int main()
 	cudaCheckErrors("cudaMalloc camera fail");
 
 	int iterations = 1;
+
+	int maxDepth = 4;
+	int samplesPerPixel = 16;
+
+	GpuTimer timer;
+	float time = 0.f;
+
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
-		processInput(viewer->m_window, camera, viewer, iterations);
+		processInput(viewer->m_window, camera, viewer, iterations, time);
 		camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
 		//
@@ -511,17 +489,26 @@ int main()
 
 		cudaGraphicsMapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 		{
+			timer.Start();
 			viewer->cuda_err = pxl_kernel_launcher(viewer->interop->ca[viewer->interop->index] ,
 				windowWidth,
 				windowHeight,
 				viewer->event,
 				viewer->stream,
-				state.d_geometry, camera, geometries.size(), iterations, d_pixelColor);
+				state.d_geometry, 
+				camera, 
+				geometries.size(),
+				iterations, 
+				maxDepth,
+				samplesPerPixel,
+				d_pixelColor);
+			timer.Stop();
 		}
 		cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 
 		char title[256];
-		sprintf(title, "Firefly | %d iterations", iterations);
+		time += timer.Elapsed();
+		sprintf(title, "Firefly | %d iterations | kernel took: %.2fs", iterations, time/iterations);
 		glfwSetWindowTitle(viewer->m_window, title);
 
 		//

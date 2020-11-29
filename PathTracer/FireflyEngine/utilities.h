@@ -23,6 +23,44 @@
 
 #include "kernel.h"
 
+// Timing
+
+struct GpuTimer
+{
+	cudaEvent_t start;
+	cudaEvent_t stop;
+
+	GpuTimer()
+	{
+		cudaEventCreate(&start);
+		cudaEventCreate(&stop);
+	}
+
+	~GpuTimer()
+	{
+		cudaEventDestroy(start);
+		cudaEventDestroy(stop);
+	}
+
+	void Start()
+	{
+		cudaEventRecord(start, 0);
+	}
+
+	void Stop()
+	{
+		cudaEventRecord(stop, 0);
+	}
+
+	float Elapsed()
+	{
+		float elapsed;
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&elapsed, start, stop);
+		return elapsed / 1000.f;
+	}
+};
+
 // Error Reporting
 #define cudaCheckErrors(msg) \
     do { \
@@ -83,15 +121,6 @@ __device__ glm::vec2 ConcentricSampleDisk(float u1, float u2) {
 
 __device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
 {
-	// TODO : Remove comments after testing
-	//const float r = sqrt(u1);
-	//const float theta = 2 * CUDART_PI_F * u2;
-
-	//const float x = r * cos(theta);
-	//const float y = r * sin(theta);
-
-	//return glm::vec3(x, y, sqrt(glm::max(0.0f, 1 - u1)));
-
 	glm::vec2 d = ConcentricSampleDisk(u1, u2);
 	float z = glm::sqrt(glm::max(0.f, 1.0f - d.x * d.x - d.y * d.y));
 	return glm::vec3(d.x, d.y, z);
@@ -110,8 +139,6 @@ struct Intersect
 	Intersect() = default;
 	glm::vec3 m_intersectionPoint;
 	glm::vec3 m_normal;
-	glm::vec3 m_tangent;
-	glm::vec3 m_bitangent;
 	float m_t{ 0.f };
 	bool m_hit{ false };
 	int geometryIndex{ -1 };
@@ -127,6 +154,33 @@ enum BXDFTyp
 	COUNT
 };
 
+
+/*******************************************************************************
+ * Calculates an orthogonal coordinate axis system from a single normalized
+ * vector.
+ * We use the normal from the intersection object to calculate its tangent
+ * and bitangent vectors. We do this by assigning one of the x,y,z components
+ * to 0. This assumption is based off the fact that the dot product of 2
+ * orthogonal vectors is 0. so if "a" and "b" are the 2 vectors,
+ * a.x*b.x + a.y*b.y + a.z+b.z = 0. If we make the assumption that
+ * (in local space) b.y is 0, then for a.x*bx + a.z*b.z to be zero we can assign
+ * b.x as -a.z and b.z as a.x, then a.x*(-a.z) + a.z*a.x will be 0.
+ * this forms the tangent. To get the bitangent, all we need to do is get the
+ * cross product between normal and tangent.
+ ******************************************************************************/
+__device__ void calculateCoordinateAxes(glm::vec3 normal, glm::vec3& tangent, glm::vec3& bitangent)
+{
+	if (normal.x > normal.y)
+	{
+		tangent = glm::normalize(glm::vec3(-normal.z, 0.f, normal.x));
+	}
+	else
+	{
+		tangent = glm::normalize(glm::vec3(0.f, -normal.z, normal.y));
+	}
+	bitangent = glm::normalize(glm::cross(normal, tangent));
+}
+
 struct BXDF
 {
 	BXDF() = default;
@@ -140,7 +194,40 @@ struct BXDF
 	float m_intensity{ -1 };
 	glm::vec3 m_transmittanceColor{ -1,-1,-1 };
 	
-	__device__ glm::vec3 bsdf(const glm::vec3& incoming, glm::vec3& outgoing, const Intersect& intersect, int depth)
+	/**
+	 * @brief calculates the PDF of a given outgoing (newly sampled bsdf direction) direction
+	 * @param incoming (INPUT): tangent space direction that is going out of the point of intersection from the previous ray
+	 * @param outgoing (INPUT): tangent space direction that is going out to be traced into the next scene
+	 * @return floating point value of the PDF of the sampled outgoing ray
+	*/
+	__device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming)
+	{
+		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+
+		//only diffuse for now
+		//TODO: add pdf for every other material type
+		if (m_type == BXDFTyp::DIFFUSE)
+		{
+			// cosine weighted hemisphere sampling: cosTheta / PI
+			return incoming.z * outgoing.z > 0.f ? glm::abs(incoming.z) / CUDART_PI_F : 0.f;
+
+			// uniform hemisphere sampling: 1 / 2*PI
+			//return CUDART_2_OVER_PI_F * 0.25f;
+		}
+	}
+
+	/**
+	 * @brief sampleBsdf samples the bsdf depending on which one it is and sends back the 
+	 *		  glm::vec3 scalar. Along with the randomly sampled bsdf direction and its 
+	 *        (the newly generated sample's) corresponding pdf.
+	 * @param outgoing (INPUT): the direction of the previous path segment that intersected with current geom that is going out of the point of intersection
+	 * @param incoming (OUTPUT): the direction that will be sampled based on the bsdf lobe. Incoming here is denoted as incoming because it is assumed this ray is incoming from the emitter
+	 * @param intersect (INPUT): the intersect object containing the normal at the point of intersection
+	 * @param bsdfPDF (OUTPUT): the PDF of the sample we generate based on the lobe
+	 * @param depth (INPUT): depth of the trace currently. Used to generate a unique random seed
+	 * @return : glm::vec3 scalar value of the object's color information
+	*/
+	__device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, const Intersect& intersect, float& bsdfPDF, int depth)
 	{
 		//ASSUMPTION: incoming vector points away from the point of intersection
 
@@ -148,9 +235,9 @@ struct BXDF
 		{
 			// CLARIFICATION: we assume that all area lights are two-sided
 			bool twoSided = true;
-			outgoing = glm::vec3(0, 0, 0);
+			incoming = glm::vec3(0, 0, 0);
 			// means we have a light source
-			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, incoming) > 0)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);// noHitColor();
+			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, outgoing) > 0)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);// noHitColor();
 		}
 
 		//else other materials
@@ -170,37 +257,20 @@ struct BXDF
 			sample[0] = curand_uniform(&state1);
 			sample[1] = curand_uniform(&state1);
 			// do warp from square to cosine weighted hemisphere
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
-			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
+			glm::vec3 tangent, bitangent;
+			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
 			//outgoing = UniformHemisphereSample(sample[0], sample[1]); 
-			outgoing = CosineSampleHemisphere(sample[0], sample[1]);
-			if (tangentSpaceIncoming.z < 0.f)
+			incoming = CosineSampleHemisphere(sample[0], sample[1]);
+			if (tangentSpaceOutgoing.z < 0.f)
 			{
-				outgoing.z *= -1.f;
+				incoming.z *= -1.f;
 			}
-			outgoing = glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * outgoing;
+			bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
+			incoming = glm::mat3(tangent, bitangent, intersect.m_normal) * incoming;
 			// albedo / PI
 			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
-		}
-	}
-
-	__device__ float pdf(const glm::vec3& incoming, const glm::vec3& outgoing, const Intersect& intersect)
-	{
-		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-
-		//only diffuse for now
-		//TODO: add pdf for every other material type
-		if (m_type == BXDFTyp::DIFFUSE )
-		{
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
-			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
-			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
-			
-			// cosine weighted hemisphere sampling: cosTheta / PI
-			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
-			
-			// uniform hemisphere sampling: 1 / 2*PI
-			//return CUDART_2_OVER_PI_F * 0.25f;
 		}
 	}
 };
@@ -834,7 +904,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& iterations)
+void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& iterations, float& time)
 {
 	bool cameraMoved = false;
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -903,5 +973,6 @@ void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& i
 		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
 		iterations = 1;
+		time = 0.f;
 	}
 }
