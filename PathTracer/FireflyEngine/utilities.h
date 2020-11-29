@@ -63,15 +63,37 @@ __device__ bool isZero(const glm::vec3& v)
 	return v.x == 0 && v.y == 0 && v.z == 0;
 }
 
+__device__ glm::vec2 ConcentricSampleDisk(float u1, float u2) {
+	glm::vec2 uOffset = 2.0f * glm::vec2(u1, u2) - glm::vec2(1.0f);
+	if (uOffset.x == 0.0f && uOffset.y == 0.0f) {
+		return glm::vec2(0.0f);
+	}
+
+	float theta, r;
+	if (glm::abs(uOffset.x) > glm::abs(uOffset.y)) {
+		r = uOffset.x;
+		theta = CUDART_PIO4_F * (uOffset.y / uOffset.x);
+	}
+	else {
+		r = uOffset.y;
+		theta = CUDART_PIO2_F - CUDART_PIO4_F * (uOffset.x / uOffset.y);
+	}
+	return r * glm::vec2(glm::cos(theta), glm::sin(theta));
+}
+
 __device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
 {
-	const float r = sqrt(u1);
-	const float theta = 2 * CUDART_PI_F * u2;
+	//const float r = sqrt(u1);
+	//const float theta = 2 * CUDART_PI_F * u2;
 
-	const float x = r * cos(theta);
-	const float y = r * sin(theta);
+	//const float x = r * cos(theta);
+	//const float y = r * sin(theta);
 
-	return glm::vec3(x, y, sqrt(glm::max(0.0f, 1 - u1)));
+	//return glm::vec3(x, y, sqrt(glm::max(0.0f, 1 - u1)));
+
+	glm::vec2 d = ConcentricSampleDisk(u1, u2);
+	float z = glm::sqrt(glm::max(0.f, 1.0f - d.x * d.x - d.y * d.y));
+	return glm::vec3(d.x, d.y, z);
 }
 
 __device__ glm::vec3 UniformHemisphereSample(float u1, float u2)
@@ -151,8 +173,8 @@ struct BXDF
 			// do warp from square to cosine weighted hemisphere
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
-			outgoing = UniformHemisphereSample(sample[0], sample[1]); 
-			//outgoing = CosineSampleHemisphere(sample[0], sample[1]);
+			//outgoing = UniformHemisphereSample(sample[0], sample[1]); 
+			outgoing = CosineSampleHemisphere(sample[0], sample[1]);
 			if (tangentSpaceIncoming.z < 0.f)
 			{
 				outgoing.z *= -1.f;
@@ -176,10 +198,10 @@ struct BXDF
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
 			
 			// cosine weighted hemisphere sampling: cosTheta / PI
-			//return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
+			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceOutgoing.z) / CUDART_PI_F : 0.f;
 			
 			// uniform hemisphere sampling: 1 / PI
-			return CUDART_2_OVER_PI_F * 0.5f;
+			//return CUDART_2_OVER_PI_F * 0.5f;
 		}
 	}
 };
