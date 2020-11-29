@@ -199,9 +199,9 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
 	return intersectOut;
 }
 
-__device__ glm::vec3 getBXDF(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries)
+__device__ glm::vec3 getBXDF(const Ray& incomingRay, const Intersect& intersect, glm::vec3& outgoingRayDirection, Geometry* geometries, int depth)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->bsdf((-incomingRay.m_direction), outgoingRayDirection, intersect));
+	return (geometries[intersect.geometryIndex].m_bxdf->bsdf((-incomingRay.m_direction), outgoingRayDirection, intersect, depth));
 }
 
 __device__ float getPDF(const Ray& incomingRay, const glm::vec3& outgoingRayDirection, const Intersect& intersect, Geometry* geometries)
@@ -209,7 +209,7 @@ __device__ float getPDF(const Ray& incomingRay, const glm::vec3& outgoingRayDire
 	return (geometries[intersect.geometryIndex].m_bxdf->pdf((-incomingRay.m_direction), outgoingRayDirection, intersect));
 }
 
-__device__ Ray& generateRay(Camera camera, int x, int y)
+__device__ Ray& generateRay(Camera camera, int x, int y, int iterations)
 {
 	Ray ray;
 
@@ -218,10 +218,10 @@ __device__ Ray& generateRay(Camera camera, int x, int y)
 
 	curandState state1;
 	curandState state2;
+
 	curand_init((unsigned long long)clock() + x, x, 0, &state1);
-	curand_init((unsigned long long)clock() + x + 5, x, 0, &state2);
 	float jx = curand_uniform(&state1);
-	float jy = curand_uniform(&state2);
+	float jy = curand_uniform(&state1);
 
 	float Px = ((x + jx) / camera.m_screenWidth) * 2.f - 1.f;
 	float Py = 1.f - ((y + jy) / camera.m_screenHeight) * 2.f;
@@ -237,7 +237,9 @@ __device__ bool isBlack(glm::vec3 color)
 	return color.x <= 0.0001f && color.y <= 0.0001f && color.z <= 0.0001f;
 }
 
-__global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int maxIterations)
+glm::vec3* d_pixelColor = nullptr;
+
+__global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberOfGeometries, int iterations, glm::vec3* d_pixelColor)
 {
 	int x = /*200;*/ blockIdx.x* blockDim.x + threadIdx.x;
 	int y = /*400;*/ blockIdx.y* blockDim.y + threadIdx.y;
@@ -262,23 +264,30 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 
 	uchar4 previousPixelColor = surf2Dread<uchar4>(surf, x * sizeof(uchar4), y, cudaBoundaryModeZero);
 
-	finalPixelColor.x = previousPixelColor.x / 255.f;
-	finalPixelColor.y = previousPixelColor.y / 255.f;
-	finalPixelColor.z = previousPixelColor.z / 255.f;
+	int multIterations = iterations <= 1 ? 1 : iterations - 1;
+	//print("readIterations", multIterations);
+
+	if (multIterations == 1)
+	{
+		d_pixelColor[pixelIndex] = glm::vec3(0.f);
+	}
+
+	finalPixelColor.x = d_pixelColor[pixelIndex].x * multIterations;
+	finalPixelColor.y = d_pixelColor[pixelIndex].y * multIterations;
+	finalPixelColor.z = d_pixelColor[pixelIndex].z * multIterations;
 
 	int samplesPerPixel = 1;
 
-	int samplesPerPixelThatContributed = 0;
+	int pathsThatContributed = 0;
 
 	glm::vec3 pixelColorPerPixel(0.f);
 	//print("readPreviousPixelColor", finalPixelColor);
-	
-	while(samplesPerPixel <= 2)
+	int maxDepth = 5;
+	while(samplesPerPixel <= 4)
 	{
-		Ray& ray = generateRay(camera, x, y);
+		Ray& ray = generateRay(camera, x, y, iterations + samplesPerPixel);
 		glm::vec3 pixelColorPerSample(0.f);
-		int iterations = 0;
-
+		int depth = 0;
 		glm::vec3 thruput(1.f);
 
 		do
@@ -293,19 +302,13 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 				Ray outgoingRay;
 				outgoingRay.m_origin = intersect.m_intersectionPoint;
 
-				glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries);
+				glm::vec3 bxdf = getBXDF(ray, intersect, outgoingRay.m_direction, geometries, depth);
 				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 				{
 					// add to thruput and exit since we hit an emitter
 					pixelColorPerSample += thruput * bxdf;
-					//print("thruputWhenWeHitLight", thruput);
-					if (iterations > 0)
-					{
-						pixelColorPerSample /= (float)(iterations);
-					}
-					samplesPerPixelThatContributed++;
+					pathsThatContributed++;
 					//print("pixelColorPerSample", pixelColorPerSample);
-					//print("iterations", iterations);
 					break;
 				}
 
@@ -314,9 +317,7 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 				if (pdf > 0.0001f)
 				{
 					float dotProd = glm::abs(glm::dot(outgoingRay.m_direction, intersect.m_normal));
-					//print("dotProd", dotProd);
 					thruput *= dotProd * (bxdf / pdf);
-					//print("thruputBeforeAdding", thruput);
 				}
 				else
 				{
@@ -328,39 +329,30 @@ __global__ void launchPathTrace(Geometry* geometries, Camera camera, int numberO
 
 
 				ray = outgoingRay;
+				depth++;
 			}
-			iterations++;
-		} while (iterations < maxIterations);
+		} while (depth < maxDepth);
 
 		pixelColorPerPixel += pixelColorPerSample;
 		//print("CumulativePixelColorPerPixel", pixelColorPerPixel);
 		
 		samplesPerPixel++;
-		
-	}
-	samplesPerPixel--;
-	
-	if(samplesPerPixelThatContributed > 0)
-	{
-		pixelColorPerPixel /= (float)(samplesPerPixelThatContributed);
 	}
 	
-	//print("AveragePixelColorPerPixel", pixelColorPerPixel);
-	
-	if (!isBlack(finalPixelColor) && !isBlack(pixelColorPerPixel))
+	if(pathsThatContributed > 0)
 	{
-		finalPixelColor = (finalPixelColor + pixelColorPerPixel) / 2.f;
+		pixelColorPerPixel /= (float)(pathsThatContributed);
 	}
-	else if(isBlack(finalPixelColor) && !isBlack(pixelColorPerPixel))
-	{
-		finalPixelColor = pixelColorPerPixel;
-	}
+
+	finalPixelColor += pixelColorPerPixel;
+	finalPixelColor /= iterations;
 	//print("writeFinalPixelColor", finalPixelColor);
+	//print("writeIterations", iterations);
 	
 	// clamp the final rgb color [0, 1]
 	finalPixelColor = glm::vec3(glm::clamp(finalPixelColor.x, 0.f, 1.f), glm::clamp(finalPixelColor.y, 0.f, 1.f), glm::clamp(finalPixelColor.z, 0.f, 1.f));
-	
-	surf2Dwrite(make_uchar4(finalPixelColor[0] * 255.f, finalPixelColor[1] * 255.f, finalPixelColor[2] * 255.f, 255.f),
+	d_pixelColor[pixelIndex] = finalPixelColor;
+	surf2Dwrite(make_uchar4(finalPixelColor[0] * 255, finalPixelColor[1] * 255, finalPixelColor[2] * 255, 255),
 		surf,
 		x * sizeof(uchar4),
 		y,
@@ -375,7 +367,8 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 	Geometry* geom,
 	Camera camera,
 	int numGeom,
-	int maxIterations)
+	int iterations,
+	glm::vec3* d_pixelColor)
 {
 	cudaError_t cuda_err;
 
@@ -391,7 +384,7 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 	gridSize.x = ((width + blockSize.x - 1) / blockSize.x);
 	gridSize.y = ((height + blockSize.y -1) / blockSize.y);
 	
-	launchPathTrace << </*1,1*/gridSize, blockSize , 0, stream >> > (geom, camera, numGeom, maxIterations);
+	launchPathTrace << </*1,1*/gridSize, blockSize, 0, stream >> > (geom, camera, numGeom, iterations, d_pixelColor);
 
 	return cudaSuccess;
 }
@@ -402,7 +395,7 @@ int main()
 
 	std::vector<Triangle> trianglesInMesh;
 	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0.f), glm::vec3(0.0f), glm::vec3(1.5f), trianglesInMesh);
+	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0.f , -2.f, 0.f), glm::vec3(0.0f), glm::vec3(1.5f), trianglesInMesh);
 
 	Geometry* topPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 7.4f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
 	Geometry* leftPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
@@ -438,7 +431,7 @@ int main()
 	lightbxdfPlane->m_intensity = 1.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry->m_bxdf = diffusebxdfBLUEMesh;
+	triangleMeshGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	bottomPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
@@ -511,14 +504,17 @@ int main()
 
 	GLFWViewer* viewer = new GLFWViewer(windowWidth, windowHeight);
 
+	cudaMalloc((void**)&(d_pixelColor), sizeof(glm::vec3) * windowWidth * windowHeight);
+	cudaCheckErrors("cudaMalloc d_pixelColor fail");
+
 	state.d_camera = nullptr;
 	cudaMalloc((void**)&(state.d_camera), sizeof(Camera));
 	cudaCheckErrors("cudaMalloc camera fail");
 
-	int maxIterations = 15;
+	int iterations = 1;
 	while (!glfwWindowShouldClose(viewer->m_window))
 	{
-		processInput(viewer->m_window, camera, viewer);
+		processInput(viewer->m_window, camera, viewer, iterations);
 		camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
 		//
@@ -532,12 +528,13 @@ int main()
 				windowHeight,
 				viewer->event,
 				viewer->stream,
-				state.d_geometry, camera, geometries.size(), maxIterations);
+				state.d_geometry, camera, geometries.size(), iterations, d_pixelColor);
 		}
 		cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 
-		std::string title = "Firefly";
-		glfwSetWindowTitle(viewer->m_window, title.c_str());
+		char title[256];
+		sprintf(title, "Firefly | %d iterations", iterations);
+		glfwSetWindowTitle(viewer->m_window, title);
 
 		//
 		// BLIT & SWAP FBO
@@ -548,8 +545,8 @@ int main()
 			GL_COLOR_BUFFER_BIT,
 			GL_NEAREST);
 
-		//viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
-
+		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
+		iterations++;
 
 		glfwSwapBuffers(viewer->m_window);
 		glfwPollEvents();
