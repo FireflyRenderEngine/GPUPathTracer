@@ -57,6 +57,7 @@ struct GpuTimer
 		float elapsed;
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&elapsed, start, stop);
+		// returns the time elapsed in seconds
 		return elapsed / 1000.f;
 	}
 };
@@ -258,6 +259,15 @@ struct BXDF
 			sample[1] = curand_uniform(&state1);
 			// do warp from square to cosine weighted hemisphere
 			glm::vec3 tangent, bitangent;
+
+			// we calculate tangent and bitangent only here where we need it
+			// 2 matrix multiplications need to happen with a world space normal:
+			// transpose of the TBN (TangentBitangentNormal) matrix to calculate
+			// the tangent space outgoing direction. So when we sample the bsdf, 
+			// technically we sample the lobe in tangent space.
+			// This means that once we have a tangent space sampled direction (incoming),
+			// we need to convert this to world space
+
 			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
@@ -268,6 +278,7 @@ struct BXDF
 				incoming.z *= -1.f;
 			}
 			bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
+			// convert tangent space bsdf sampled direction (incoming) to world space
 			incoming = glm::mat3(tangent, bitangent, intersect.m_normal) * incoming;
 			// albedo / PI
 			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
@@ -904,7 +915,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& iterations, float& time)
+void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& iteration, float& time)
 {
 	bool cameraMoved = false;
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -968,11 +979,13 @@ void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& i
 	{
 		saveToPPM(viewer);
 	}
+
+	// if the camera moved, then we need to clear our framebuffer and reset the iteration and time
 	if (cameraMoved)
 	{
 		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
-		iterations = 1;
+		iteration = 1;
 		time = 0.f;
 	}
 }
