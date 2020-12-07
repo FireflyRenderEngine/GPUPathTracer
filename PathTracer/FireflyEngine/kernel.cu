@@ -391,6 +391,85 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 	return cudaSuccess;
 }
 
+__global__ void CreateWorldAABB(Geometry* geometries, size_t numGeometries, int numOfPrimitives, AABB* AABBArray) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	if (index < numOfPrimitives) {
+		return;
+	}
+
+	int primitiveCount = 0;
+	for (int i = 0; i < numGeometries; ++i)
+	{
+		primitiveCount += (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH) ? geometries[i].m_numberOfTriangles : 1;
+		if (index < primitiveCount) {
+			if (geometries[i].m_geometryType != GeometryType::TRIANGLEMESH) {
+				AABBArray[index] = BuildAABB(geometries[i], -1);
+			}
+			else {
+				AABBArray[index] = BuildAABB(geometries[i], index - i);
+			}
+		}
+	}
+
+	//int primitiveIndex = 0;
+	//for (int i = 0; i < numGeometries; ++i)
+	//{
+	//	if (index < numGeometries)
+	//	{
+	//		if (geometries[i].m_geometryType != GeometryType::TRIANGLEMESH)
+	//		{
+	//			if (index == i)
+	//			{
+	//				// need to break here
+	//				BuildAABB(geometries[i], -1);
+	//			}
+	//			continue;
+	//		}
+	//		else
+	//		{
+	//			// need to break here
+	//			BuildAABB(geometries[i], index);
+	//			break;
+	//		}
+	//	}
+	//	else
+	//	{
+	//		if (geometries[i].m_geometryType != GeometryType::TRIANGLEMESH)
+	//		{
+	//			if (primitiveIndex > 0)
+	//			{
+	//				if (index == primitiveIndex)
+	//				{
+	//					// found; need to break here
+	//					BuildAABB(geometries[i], -1);
+	//					break;
+	//				}
+	//				else
+	//				{
+	//					primitiveIndex++;
+	//				}
+	//			}
+	//			continue;
+	//		}
+	//		else
+	//		{
+	//			if ((geometries[i].m_numTriangles + i + primitiveIndex) <= index)
+	//			{
+	//				primitiveIndex = geometries[i].m_numTriangles + i;
+	//				continue;
+	//			}
+	//			else
+	//			{
+	//				// need to break here
+	//				BuildAABB(geometries[i], index - primitiveIndex);
+	//				break;
+	//			}
+	//		}
+	//	}
+	//}	 
+}
+
 int main()
 {
 	PathTracerState state;
@@ -464,6 +543,14 @@ int main()
 	cudaMemcpy(state.d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
 	cudaCheckErrors("cudaMemcpy geometry fail");
 	state.d_raytracableObjects = geometries.size();
+
+	// Create and load AABB
+	state.d_AABB = nullptr;
+	cudaMalloc((void**)&(state.d_AABB), sizeof(AABB) * GetTotalPrimitiveCount(geometries));
+	cudaCheckErrors("cudaMalloc geometry fail");
+	int blockSize = 256;
+	int numBlocks = (GetTotalPrimitiveCount(geometries) + 1) / blockSize;
+	CreateWorldAABB << <numBlocks, blockSize >> > (state.d_geometry, geometries.size(), GetTotalPrimitiveCount(geometries), state.d_AABB);
 
 	// Now we will save the internal triangle data to device memory
 	for (int i = 0; i < geometries.size(); ++i)
@@ -551,8 +638,8 @@ int main()
 		cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 
 		char title[256];
-		time += timer.Elapsed();
-		sprintf(title, "Firefly | iteration: %d | kernel took: %.2fs | samples per pixel: %d | max depth: %d", iteration, time/iteration, samplesPerPixel, maxDepth);
+		time = timer.Elapsed();
+		sprintf(title, "Firefly | FPS %f | iteration: %d | kernel took: %.2fs | samples per pixel: %d | max depth: %d", 1.0f/time, iteration, time/iteration, samplesPerPixel, maxDepth);
 		glfwSetWindowTitle(viewer->m_window, title);
 
 		//

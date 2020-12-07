@@ -379,10 +379,94 @@ struct Geometry
 	// CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
 	glm::vec3 m_normal{0,0,1};
 	Triangle* m_triangles{ nullptr };
-	int m_numberOfTriangles;
+	int m_numberOfTriangles{ 0 };
 
 	BXDF* m_bxdf{nullptr};
 };
+
+struct AABB {
+	glm::vec3 m_minBound;
+	glm::vec3 m_maxBound;
+	int m_geometryArrayIndex, m_geometryArrayTriangleIindex;
+
+	// Default const.
+	__device__ AABB() {}
+
+	__device__ AABB(glm::vec3 minBound, glm::vec3 maxBound) 
+	{
+		m_minBound = minBound;
+		m_maxBound = maxBound;
+	}
+
+	__device__ void operator=(const AABB& aabb) 
+	{
+		m_minBound = aabb.m_minBound;
+		m_maxBound = aabb.m_maxBound;
+	}
+	
+	__device__ void UpdateBounds(glm::vec3 point)
+	{
+		//X
+		if (m_minBound.x > point.x) {
+			m_minBound.x = point.x;
+		}
+		else if (m_maxBound.x < point.x) {
+			m_maxBound.x = point.x;
+		}
+
+		//Y
+		if (m_minBound.y > point.y) {
+			m_minBound.y = point.y;
+		}
+		else if (m_maxBound.y < point.y) {
+			m_maxBound.y = point.y;
+		}
+
+		//Z
+		if (m_minBound.z > point.z) {
+			m_minBound.z = point.z;
+		}
+		else if (m_maxBound.z < point.z) {
+			m_maxBound.z = point.z;
+		}
+	}
+};
+
+__device__ AABB& BuildAABB(Geometry& geometry, int triangleIndex)
+{
+	AABB aabb;
+	if (geometry.m_geometryType == GeometryType::PLANE)
+	{
+		// The plane is bound between -0.5 <-> 0.5 on the X and Y plane in the object space.
+		// We will use these points get the min max and convert them to world space to get final AABB min & max.
+		glm::vec3 minPoint = geometry.m_modelMatrix * glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f);
+		glm::vec3 maxPoint = geometry.m_modelMatrix * glm::vec4(0.5f, 0.5f, 0.0f, 1.0f);
+
+		aabb.UpdateBounds(minPoint);
+		aabb.UpdateBounds(maxPoint);
+	}
+	else if (geometry.m_geometryType == GeometryType::SPHERE)
+	{
+		// The sphere is represented with a radius centered around the origin.
+		glm::vec3 minPoint = geometry.m_modelMatrix * glm::vec4(-geometry.m_sphereRadius, -geometry.m_sphereRadius, -geometry.m_sphereRadius, 1.0f);
+		glm::vec3 maxPoint = geometry.m_modelMatrix * glm::vec4(geometry.m_sphereRadius, geometry.m_sphereRadius, geometry.m_sphereRadius, 1.0f);
+
+		aabb.UpdateBounds(minPoint);
+		aabb.UpdateBounds(maxPoint);
+	}
+	else if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
+	{
+		// We will convert the triangle from the object space to world space and use those points to build the AABB
+		glm::vec3 vertex1 = geometry.m_modelMatrix * glm::vec4(geometry.m_triangles[triangleIndex].m_v0, 1.0f);
+		glm::vec3 vertex2 = geometry.m_modelMatrix * glm::vec4(geometry.m_triangles[triangleIndex].m_v1, 1.0f);
+		glm::vec3 vertex3 = geometry.m_modelMatrix * glm::vec4(geometry.m_triangles[triangleIndex].m_v2, 1.0f);
+
+		aabb.UpdateBounds(vertex1);
+		aabb.UpdateBounds(vertex2);
+		aabb.UpdateBounds(vertex3);
+	}
+	return aabb;
+}
 
 struct Scene
 {
@@ -908,6 +992,14 @@ void saveToPPM(GLFWViewer* viewer)
 	}
 	renderFile.close();
 	delete[] pixels4;
+}
+
+int GetTotalPrimitiveCount(std::vector<Geometry> geometries) {
+	int primitiveCount= -1;
+	for (auto geometry : geometries) {
+		primitiveCount += (geometry.m_numberOfTriangles == 0) ? 1 : geometry.m_numberOfTriangles;
+	}
+	return primitiveCount;
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) 
