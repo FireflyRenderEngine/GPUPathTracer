@@ -82,7 +82,7 @@ For more information, read Nvidia's blog ["GPU Pro Tip: CUDA 7 Streams Simplify 
 
 ### What do we need to make interop happen? And how do we tie all these aforementioned concepts together?
 
-We create 2 framebuffers, 2 renderbuffers, 2 `cudaArray`s and 2 `cudaGraphicsResource`s to begin with. The size of these 2d buffers match the width and height of our window to be displayed:
+We start by creating 2 framebuffers and 2 renderbuffers:
 
 ```cpp
 // allocate arrays
@@ -107,5 +107,157 @@ for (int index = 0; index < fbo_count; index++)
 }
 ```
 where interop object stores all the required arrays and resources. `fb` is the framebuffer object, `rb` is the renderbuffer object, `cgr` is the cudaGraphicsResource and `ca` is the cudaArray pointer. `fbo_count` here is set to 2 since we are using double buffering. 
-The above code was taken from [Allan MacKinnon's](https://gist.github.com/allanmac): [A tiny example of CUDA + OpenGL interop with write-only surfaces and CUDA kernels.](https://gist.github.com/allanmac/4ff11985c3562830989f).
+The above code was taken from [Allan MacKinnon's](https://gist.github.com/allanmac): [A tiny example of CUDA + OpenGL interop with write-only surfaces and CUDA kernels.](https://gist.github.com/allanmac/4ff11985c3562830989f)
+Each renderbuffer object needs to be attached to a framebuffer object to be able to display and that's what `glNamedFramebufferRenderbuffer` does. We want the color attachment only instead of other options such as depth, stencil, etc.
 
+Now that the OpenGL buffers are all created and ready for action, let's create the CUDA arrays:
+```cpp
+    // resize rbo
+    glNamedRenderbufferStorage(interop->rb[index],GL_RGBA8,width,height);
+
+    // register rbo
+    cuda_err = cuda(GraphicsGLRegisterImage(&interop->cgr[index],
+				      interop->rb[index],
+				      GL_RENDERBUFFER,
+				      cudaGraphicsRegisterFlagsSurfaceLoadStore | 
+				      cudaGraphicsRegisterFlagsWriteDiscard));
+```
+For every frame/render buffer object we start by registering the resource (cudaGraphicsResource) to the renderbuffer. That's what `cudaGraphicsGLRegisterImage` does.  `cudaGraphicsRegisterFlagsWriteDiscard` is the important flag we need here. 
+> cudaGraphicsRegisterFlagsWriteDiscard: Specifies that CUDA will not read from this resource and will write over the entire contents of the resource, so none of the data previously stored in the resource will be preserved.
+
+And the code below is pretty self-explanatory, basically mapping the `cudaArray` to the `cudaGraphicsResource`:
+```cpp
+// map graphics resources
+cuda_err = cuda(GraphicsMapResources(interop->count,interop->cgr,0));
+
+// get CUDA Array refernces
+for (int index=0; index<interop->count; index++)
+{
+  cuda_err = cuda(GraphicsSubResourceGetMappedArray(&interop->ca[index],
+					interop->cgr[index],
+					0,0));
+}
+
+// unmap graphics resources
+cuda_err = cuda(GraphicsUnmapResources(interop->count,interop->cgr,0));
+```
+
+Now that we have all the buffers/arrays created and set up, all we need to do is let our cuda kernels write to these buffers and swap them (the front and the back render/frame buffer) at the end of each frame:
+
+```cpp
+while (!glfwWindowShouldClose(viewer->m_window))
+{
+	// ... preprocess our camera function
+	// pre-calculate matrix multiplications
+	
+	//
+	// EXECUTE CUDA KERNEL ON RENDER BUFFER
+	//
+
+	cudaGraphicsMapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
+	{
+		// ... pass viewer->interop->ca to our CUDA kernel here ...
+		// ... CUDA Kernel Call ...
+	}
+	cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
+
+	// ... set window title here ...
+	glfwSetWindowTitle(viewer->m_window, title);
+
+	//
+	// BLIT & SWAP FBO ::: use our double buffers
+	// 
+	glBlitNamedFramebuffer(viewer->interop->fb[viewer->interop->index], 0,
+		0, 0, viewer->interop->width, viewer->interop->height,
+		0, viewer->interop->height, viewer->interop->width, 0,
+		GL_COLOR_BUFFER_BIT,
+		GL_NEAREST);
+
+	viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
+	iteration++;
+
+	glfwSwapBuffers(viewer->m_window);
+	glfwPollEvents();
+}
+```
+
+Okay so we're almost done. You might be thinking so how do we use the `surface` memory and how is the `cudaArray` going to do that? 
+In our project (just like Allan Mac's), we create a global `surface` object like this:
+```cpp
+surface<void, cudaSurfaceType2D> surf;
+```
+
+Basically creating a 2D memory layout for our pixels to be filled in. 
+And then all we have to do is bind our `cudaArray` to this `surf` object before kernel call. Our kernel will then be able to read and write on this surface memory at any time once our `cudaArray` is bound:
+```cpp
+cudaBindSurfaceToArray(surf, viewer->interop->ca[viewer->interop->index]);
+```
+
+Phew. Okay. I can see the light at the end of this deep tunnel. 
+All we need to now do is, write to this `surface` memory from our cuda kernel:
+```cpp
+__global__ void launchPathTrace(
+	Geometry* geometries, 
+	Camera camera, 
+	int numberOfGeometries, 
+	int iteration,
+	int maxDepth,
+	int totalSamplesPerPixel,
+	glm::vec3* d_pixelColor)
+{
+	int x = blockIdx.x* blockDim.x + threadIdx.x;
+	int y = blockIdx.y* blockDim.y + threadIdx.y;
+
+	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
+	int pixelIndex = y * camera.m_screenWidth + x;
+
+	if (pixelIndex >= pixelSize)
+	{
+		return;
+	}
+	// Do Light transport here
+	// Loop over total number of samples to be shot per pixel (gives us anti aliasing)
+	//   A. Loop until we hit max depth or russian roulette termination
+	//		1. Check if we hit a light
+	//		  1.a if we hit light, then terminate
+	//		2. Check what material we hit
+	//		  2.a get bsdf and pdf
+	//		  2.b get next ray (incoming)
+	//		  2.c calculate thruput and calculate russian roulette
+	//		  2.d Go bath to A
+
+	// This is where we will store the final radiance that will be converted to RGB
+	// to be stored and displayed by the render buffer
+	glm::vec3 finalPixelColor(0.f);
+
+	// when we begin tracing rays, we need to clear & reset the render buffer (done outside this kernel)
+	// and clear and reset the device buffer we use for accumulation.
+	// This happens every time iteration is 1.
+	if (iteration == 1)
+	{
+		d_pixelColor[pixelIndex] = glm::vec3(0.f);
+	}
+
+	finalPixelColor.x = d_pixelColor[pixelIndex].x;
+	finalPixelColor.y = d_pixelColor[pixelIndex].y;
+	finalPixelColor.z = d_pixelColor[pixelIndex].z;
+
+	// ... path tracing code here ...
+
+	// clamp the final rgb color [0, 1]
+	finalPixelColor = glm::vec3(glm::clamp(finalPixelColor.x, 0.f, 1.f), glm::clamp(finalPixelColor.y, 0.f, 1.f), glm::clamp(finalPixelColor.z, 0.f, 1.f));
+
+	// write the color value to the pixel location x,y
+	surf2Dwrite(make_uchar4(finalPixelColor[0] * 255, finalPixelColor[1] * 255, finalPixelColor[2] * 255, 255),
+		surf,
+		x * sizeof(uchar4),
+		y,
+		cudaBoundaryModeZero);
+}
+```
+
+Ignore most of the details above for now and just take a look at `surf2DRead` and `surf2DWrite`. This is our cuda kernel interacting with the `surface` memory. 
+
+And that's it folks. That was one helluva ride. At least for us through this project. 
+
+A big thanks to [Allan MacKinnon](https://gist.github.com/allanmac) for his amazing code. Also a thanks to other resources linked here in this post.
