@@ -70,7 +70,7 @@ This code is pretty self-explanatory once you know the basics and a few glossary
 - cudaGraphicsResource: A resource must be registered to CUDA before it can be mapped using the functions mentioned in OpenGL Interoperability like cudaGraphicsMapResources among others. cudaGraphicsResource is a struct that holds information about the mapped resources.
 
 - CUDA streams: A stream is a sequence of commands (possibly issued by different host threads) that execute in order. Different streams, on the other hand, may execute their commands out of order with respect to one another or concurrently.
-Lei Mao's [blog](https://leimao.github.io/blog/CUDA-Stream/) explains this well with the following figure:
+[Lei Mao](https://leimao.github.io/)'s [blog](https://leimao.github.io/blog/CUDA-Stream/) explains this well with the following figure:
 [![](https://leimao.github.io/images/blog/2020-02-02-CUDA-Stream/cuda-stream.png)](https://leimao.github.io/blog/CUDA-Stream/)
 For more information, read Nvidia's blog ["GPU Pro Tip: CUDA 7 Streams Simplify Concurrency"](https://developer.nvidia.com/blog/gpu-pro-tip-cuda-7-streams-simplify-concurrency/) here.
 
