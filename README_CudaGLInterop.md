@@ -260,7 +260,7 @@ Ignore most of the details above for now and just take a look at `surf2DRead` an
 
 And that's it folks. That was one helluva ride. At least for us through this project. 
 
-### Closing Remarks
+## Closing Remarks
 A big thanks to [Allan MacKinnon](https://gist.github.com/allanmac) for his amazing code. Also a thanks to other resources linked here in this post.
 
 So you might be thinking "Is this the only way to do CUDA-OpenGL interop?", the answer is no. 
