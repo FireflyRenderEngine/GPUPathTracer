@@ -260,4 +260,10 @@ Ignore most of the details above for now and just take a look at `surf2DRead` an
 
 And that's it folks. That was one helluva ride. At least for us through this project. 
 
+### Closing Remarks
 A big thanks to [Allan MacKinnon](https://gist.github.com/allanmac) for his amazing code. Also a thanks to other resources linked here in this post.
+
+So you might be thinking "Is this the only way to do CUDA-OpenGL interop?", the answer is no. 
+We started out by doing it the old-school way, creating a buffer of pixels ready to be rendered from CUDA kernel into an OpenGL framebuffer. Then rendering this image to a texture as a simple `glsl` shader. This creates unnecessary bandwidth issues, by virtue of memory transfers to-and-from device and host. If you want to try that simpler method out, follow along here: [Tutorial 14 : Render To Texture.](http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-14-render-to-texture/)
+Of course there are many other ways to do this, but these are the few methods we explored through the creation of our project.
+Thanks for reading!
