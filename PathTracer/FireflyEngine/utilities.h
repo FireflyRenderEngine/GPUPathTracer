@@ -21,6 +21,10 @@
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
 
+#define RAY_EPSILON 1e-6f
+
+#define DUFF_ONB
+
 #include "kernel.h"
 
 // Timing
@@ -85,6 +89,16 @@ __device__ void print(const char* label, int value)
 	printf("%s: %d\n", label, value);
 }
 
+__device__ void print(const char* label, size_t value)
+{
+	printf("%s: %d\n", label, value);
+}
+
+__device__ void print(const char* label, unsigned int value)
+{
+	printf("%s: %d\n", label, value);
+}
+
 __device__ void print(const char* label, glm::vec3 value)
 {
 	printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
@@ -99,21 +113,25 @@ __device__ void print(const char* label, uchar4 value)
 
 __device__ bool isBlack(glm::vec3 color)
 {
-	return color.x <= 0.0001f && color.y <= 0.0001f && color.z <= 0.0001f;
+	return color.x <= RAY_EPSILON && color.y <= RAY_EPSILON && color.z <= RAY_EPSILON;
 }
 
-__device__ glm::vec2 ConcentricSampleDisk(float u1, float u2) {
+__device__ glm::vec2 ConcentricSampleDisk(float u1, float u2)
+{
 	glm::vec2 uOffset = 2.0f * glm::vec2(u1, u2) - glm::vec2(1.0f);
-	if (uOffset.x == 0.0f && uOffset.y == 0.0f) {
+	if (uOffset.x == 0.0f && uOffset.y == 0.0f) 
+	{
 		return glm::vec2(0.0f);
 	}
 
 	float theta, r;
-	if (glm::abs(uOffset.x) > glm::abs(uOffset.y)) {
+	if (glm::abs(uOffset.x) > glm::abs(uOffset.y)) 
+	{
 		r = uOffset.x;
 		theta = CUDART_PIO4_F * (uOffset.y / uOffset.x);
 	}
-	else {
+	else 
+	{
 		r = uOffset.y;
 		theta = CUDART_PIO2_F - CUDART_PIO4_F * (uOffset.x / uOffset.y);
 	}
@@ -171,6 +189,16 @@ enum BXDFTyp
  ******************************************************************************/
 __device__ void calculateCoordinateAxes(glm::vec3 normal, glm::vec3& tangent, glm::vec3& bitangent)
 {
+#ifdef DUFF_ONB
+	// Duff et al. Building an Orthonormal Basis, Revisited:
+	// http://jcgt.org/published/0006/01/01/paper.pdf
+	// supposed to be faster
+	float sign = copysignf(1.0f, normal.z);
+	const float a = -1.0f / (sign + normal.z);
+	const float b = normal.x * normal.y * a;
+	tangent = glm::vec3(1.0f + sign * normal.x * normal.x * a, sign * b, -sign * normal.x);
+	bitangent = glm::vec3(b, sign + normal.y * normal.y * a, -normal.y);
+#else
 	if (normal.x > normal.y)
 	{
 		tangent = glm::normalize(glm::vec3(-normal.z, 0.f, normal.x));
@@ -180,6 +208,7 @@ __device__ void calculateCoordinateAxes(glm::vec3 normal, glm::vec3& tangent, gl
 		tangent = glm::normalize(glm::vec3(0.f, -normal.z, normal.y));
 	}
 	bitangent = glm::normalize(glm::cross(normal, tangent));
+#endif
 }
 
 struct BXDF
@@ -238,7 +267,7 @@ struct BXDF
 			bool twoSided = true;
 			incoming = glm::vec3(0, 0, 0);
 			// means we have a light source
-			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, outgoing) > 0)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);// noHitColor();
+			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, outgoing) > 0)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);
 		}
 
 		//else other materials
@@ -271,7 +300,7 @@ struct BXDF
 			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
-			//outgoing = UniformHemisphereSample(sample[0], sample[1]); 
+			incoming = UniformHemisphereSample(sample[0], sample[1]);
 			incoming = CosineSampleHemisphere(sample[0], sample[1]);
 			if (tangentSpaceOutgoing.z < 0.f)
 			{
@@ -304,6 +333,12 @@ struct Triangle
 		m_n0(n0), m_n1(n1), m_n2(n2)
 	{
 	}
+
+	float area() const
+	{
+		return 0.5f * glm::length(glm::cross(m_v1 - m_v0, m_v2 - m_v0));
+	}
+
 	// Vertices
 	glm::vec3 m_v0;
 	glm::vec3 m_v1;
@@ -341,8 +376,10 @@ struct Geometry
 		{
 			case GeometryType::SPHERE:
 				m_sphereRadius = radius;
+				m_surfaceArea = 4.f * CUDART_PI_F * m_sphereRadius * m_sphereRadius;
 				break;
 			case GeometryType::PLANE:
+				m_surfaceArea = scale.x * scale.y;
 				break;
 			case GeometryType::TRIANGLEMESH:
 			{
@@ -353,12 +390,49 @@ struct Geometry
 				for (int i = 0; i < m_numberOfTriangles; ++i)
 				{
 					m_triangles[i] = triangles[i];
+					m_surfaceArea += triangles[i].area();
 				}
 				break;
 			}
 			default:
 				std::cout << "Geometry type is not supported yet!" << std::endl;
 		}
+	}
+
+	__device__ Intersect& sampleLight(glm::vec2 sample) const
+	{
+		Intersect worldSpaceObj;
+
+		if (m_geometryType == GeometryType::PLANE)
+		{
+			// transform sample to world space
+			worldSpaceObj.m_intersectionPoint = m_modelMatrix * glm::vec4(sample.x - 0.5f, sample.y - 0.5f, 0.f, 1.f);
+			worldSpaceObj.m_normal = glm::normalize(m_invTransModelMatrix * glm::vec4(m_normal, 0.f));
+		}
+		if (m_geometryType == GeometryType::TRIANGLEMESH)
+		{
+			curandState state1;
+			curand_init((unsigned long long)clock(), 0, 0, &state1);
+			int randIdx = curand_uniform(&state1) * ((sizeof(m_triangles))/(sizeof(m_triangles[0])));
+
+			Triangle randomlySampleTriangle = m_triangles[randIdx];
+
+			float su0 = std::sqrt(sample[0]);
+			glm::vec2 uniformPointOnTriangle(1 - su0, sample[1] * su0);
+			worldSpaceObj.m_intersectionPoint = uniformPointOnTriangle[0] * randomlySampleTriangle.m_v0 + 
+												uniformPointOnTriangle[1] * randomlySampleTriangle.m_v1 + 
+												(1 - uniformPointOnTriangle[0] - uniformPointOnTriangle[1]) * randomlySampleTriangle.m_v2;
+			glm::vec3 intersectPoint = worldSpaceObj.m_intersectionPoint;
+
+			// Calculate the normal using barycentric coordinates
+			float denom = (randomlySampleTriangle.m_v1.y - randomlySampleTriangle.m_v2.y) * (randomlySampleTriangle.m_v0.x - randomlySampleTriangle.m_v2.x) + (randomlySampleTriangle.m_v2.x - randomlySampleTriangle.m_v1.x) * (randomlySampleTriangle.m_v0.y - randomlySampleTriangle.m_v2.y);
+			float wv1 = ((randomlySampleTriangle.m_v1.y - randomlySampleTriangle.m_v2.y) * (intersectPoint.x - randomlySampleTriangle.m_v2.x) + (randomlySampleTriangle.m_v2.x - randomlySampleTriangle.m_v1.x) * (intersectPoint.y - randomlySampleTriangle.m_v2.y)) / denom;
+			float wv2 = ((randomlySampleTriangle.m_v2.y - randomlySampleTriangle.m_v0.y) * (intersectPoint.x - randomlySampleTriangle.m_v2.x) + (randomlySampleTriangle.m_v0.x - randomlySampleTriangle.m_v2.x) * (intersectPoint.y - randomlySampleTriangle.m_v2.y)) / denom;
+			float wv3 = 1 - wv1 - wv2;
+			worldSpaceObj.m_normal = glm::normalize((wv1 * randomlySampleTriangle.m_n0) + (wv2 * randomlySampleTriangle.m_n1) + (wv3 * randomlySampleTriangle.m_n2));
+
+		}
+		return worldSpaceObj;
 	}
 
 	// Types:
@@ -375,6 +449,8 @@ struct Geometry
 
 	glm::mat4 m_invTransModelMatrix;
 
+	float m_surfaceArea;
+
 	float m_sphereRadius;
 	// CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
 	glm::vec3 m_normal{0,0,1};
@@ -383,90 +459,6 @@ struct Geometry
 
 	BXDF* m_bxdf{nullptr};
 };
-
-struct AABB {
-	glm::vec3 m_minBound;
-	glm::vec3 m_maxBound;
-	int m_geometryArrayIndex, m_geometryArrayTriangleIindex;
-
-	// Default const.
-	__device__ AABB() {}
-
-	__device__ AABB(glm::vec3 minBound, glm::vec3 maxBound) 
-	{
-		m_minBound = minBound;
-		m_maxBound = maxBound;
-	}
-
-	__device__ void operator=(const AABB& aabb) 
-	{
-		m_minBound = aabb.m_minBound;
-		m_maxBound = aabb.m_maxBound;
-	}
-	
-	__device__ void UpdateBounds(glm::vec3 point)
-	{
-		//X
-		if (m_minBound.x > point.x) {
-			m_minBound.x = point.x;
-		}
-		else if (m_maxBound.x < point.x) {
-			m_maxBound.x = point.x;
-		}
-
-		//Y
-		if (m_minBound.y > point.y) {
-			m_minBound.y = point.y;
-		}
-		else if (m_maxBound.y < point.y) {
-			m_maxBound.y = point.y;
-		}
-
-		//Z
-		if (m_minBound.z > point.z) {
-			m_minBound.z = point.z;
-		}
-		else if (m_maxBound.z < point.z) {
-			m_maxBound.z = point.z;
-		}
-	}
-};
-
-__device__ AABB& BuildAABB(Geometry& geometry, int triangleIndex)
-{
-	AABB aabb;
-	if (geometry.m_geometryType == GeometryType::PLANE)
-	{
-		// The plane is bound between -0.5 <-> 0.5 on the X and Y plane in the object space.
-		// We will use these points get the min max and convert them to world space to get final AABB min & max.
-		glm::vec3 minPoint = geometry.m_modelMatrix * glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f);
-		glm::vec3 maxPoint = geometry.m_modelMatrix * glm::vec4(0.5f, 0.5f, 0.0f, 1.0f);
-
-		aabb.UpdateBounds(minPoint);
-		aabb.UpdateBounds(maxPoint);
-	}
-	else if (geometry.m_geometryType == GeometryType::SPHERE)
-	{
-		// The sphere is represented with a radius centered around the origin.
-		glm::vec3 minPoint = geometry.m_modelMatrix * glm::vec4(-geometry.m_sphereRadius, -geometry.m_sphereRadius, -geometry.m_sphereRadius, 1.0f);
-		glm::vec3 maxPoint = geometry.m_modelMatrix * glm::vec4(geometry.m_sphereRadius, geometry.m_sphereRadius, geometry.m_sphereRadius, 1.0f);
-
-		aabb.UpdateBounds(minPoint);
-		aabb.UpdateBounds(maxPoint);
-	}
-	else if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
-	{
-		// We will convert the triangle from the object space to world space and use those points to build the AABB
-		glm::vec3 vertex1 = geometry.m_modelMatrix * glm::vec4(geometry.m_triangles[triangleIndex].m_v0, 1.0f);
-		glm::vec3 vertex2 = geometry.m_modelMatrix * glm::vec4(geometry.m_triangles[triangleIndex].m_v1, 1.0f);
-		glm::vec3 vertex3 = geometry.m_modelMatrix * glm::vec4(geometry.m_triangles[triangleIndex].m_v2, 1.0f);
-
-		aabb.UpdateBounds(vertex1);
-		aabb.UpdateBounds(vertex2);
-		aabb.UpdateBounds(vertex3);
-	}
-	return aabb;
-}
 
 struct Scene
 {
@@ -493,7 +485,7 @@ struct Ray
 {
 	Ray() = default;
 	__device__ Ray(glm::vec3 origin, glm::vec3 direction)
-		:m_origin(origin), m_direction(direction)
+		:m_origin(origin), m_direction(glm::normalize(direction))
 	{
 	}
 	__device__ Ray& operator=(const Ray& otherRay) 
