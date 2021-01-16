@@ -20,8 +20,12 @@
 
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION // define this in only *one* .cc
+#include "stb_image_write.h"
 
-#define RAY_EPSILON 1e-6f
+#include <afxdlgs.h>
+
+#define RAY_EPSILON 1e-5f
 
 #define DUFF_ONB
 
@@ -973,7 +977,7 @@ void saveToPPM(GLFWViewer* viewer)
 	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
 	std::ofstream renderFile;
 	renderFile.open("render.ppm");
-
+	
 	renderFile << "P3" << std::endl;
 	renderFile << width << " " << height << std::endl;
 	renderFile << 255 << std::endl;
@@ -983,6 +987,60 @@ void saveToPPM(GLFWViewer* viewer)
 		renderFile << static_cast<int>(pixels4[i].x) << " " << static_cast<int>(pixels4[i].y) << " " << static_cast<int>(pixels4[i].z) << std::endl;
 	}
 	renderFile.close();
+	delete[] pixels4;
+}
+
+void saveToIMAGE(GLFWViewer* viewer)
+{
+	int width = viewer->interop->width;
+	int height = viewer->interop->height;
+	uchar4* pixels4 = new uchar4[width * height];
+
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+	
+	CFileDialog FileDlg(FALSE, NULL, "render", OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_ENABLESIZING , "Image files (*.png, *.jpg, *.jpeg, *.tga, *.bmp, *.hdr) | *.png; *.jpg; *.jpeg; *.tga; *.bmp; *.hdr||");
+	std::string pathName;
+	std::string fileExtension;
+	if (FileDlg.DoModal() != IDOK)
+	{
+		return;
+	}
+	fileExtension = FileDlg.GetFileExt();
+	pathName = FileDlg.GetPathName();
+	stbi_flip_vertically_on_write(1);
+	if(!fileExtension.compare("png") || !fileExtension.compare(""))
+	{
+		if (!fileExtension.compare(""))
+		{
+			pathName += ".png";
+		}
+		stbi_write_png(pathName.c_str(), width, height, 4, pixels4, width * 4);
+	}
+	else if (!fileExtension.compare("hdr"))
+	{
+		float* hdrPixels = new float[4 * width * height];
+		for (int i = 0; i < width * height * 4; i += 4)
+		{
+			hdrPixels[i] = pixels4[i / 4].x / 255.f;
+			hdrPixels[i + 1] = pixels4[i / 4].y / 255.f;
+			hdrPixels[i + 2] = pixels4[i / 4].z / 255.f;
+			hdrPixels[i + 3] = pixels4[i / 4].w / 255.f;
+		}
+		stbi_write_hdr(pathName.c_str(), width, height, 4, hdrPixels);
+		delete[] hdrPixels;
+	}
+	else if (!fileExtension.compare("jpg") || !fileExtension.compare("jpeg"))
+	{
+		stbi_write_jpg(pathName.c_str(), width, height, 4, pixels4, 85);
+	}
+	else if (!fileExtension.compare("tga") )
+	{
+		stbi_write_tga(pathName.c_str(), width, height, 4, pixels4);
+	}
+	else if (!fileExtension.compare("bmp") )
+	{
+		stbi_write_bmp(pathName.c_str(), width, height, 4, pixels4);
+	}
 	delete[] pixels4;
 }
 
@@ -1059,9 +1117,10 @@ void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& i
 		camera.ProcessKeyboard(10);
 		cameraMoved = true;
 	}
-	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
 	{
-		saveToPPM(viewer);
+		//saveToPPM(viewer);
+		saveToIMAGE(viewer);
 	}
 
 	// if the camera moved, then we need to clear our framebuffer and reset the iteration and time

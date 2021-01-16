@@ -7,11 +7,12 @@
     <SOLUTION_DIR>$(SolutionDir)..\</SOLUTION_DIR>
     <GLFW_VER>glfw-3.3.2</GLFW_VER>
     <GLAD_VER>glad_GL-4.6</GLAD_VER>
+    <STB_DIR>stb_image_write</STB_DIR>
   </PropertyGroup>
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLAD_VER);$(INCLUDE_DIR)\$(GLFW_VER);$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories);$(CudaToolkitIncludeDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(INCLUDE_DIR)\$(GLAD_VER);$(INCLUDE_DIR)\$(GLFW_VER);$(INCLUDE_DIR)\$(STB_DIR);$(INCLUDE_DIR)\$(GLM_VER);%(AdditionalIncludeDirectories);$(CudaToolkitIncludeDir)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -39,6 +40,9 @@
     </BuildMacro>
     <BuildMacro Include="GLAD_VER">
       <Value>$(GLAD_VER)</Value>
+    </BuildMacro>
+    <BuildMacro Include="STB_DIR">
+      <Value>$(STB_DIR)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

@@ -516,7 +516,7 @@ int main()
 	std::vector<Geometry> geometries;
 	geometries.push_back(*triangleMeshGeometry);
 	geometries.push_back(*topPlaneLightGeometry);
-	geometries.push_back(*leftPlaneLightGeometry);
+	//geometries.push_back(*leftPlaneLightGeometry);
 	geometries.push_back(*bottomPlaneWhiteGeometry);
 	geometries.push_back(*backPlaneWhiteGeometry);
 	geometries.push_back(*topPlaneWhiteGeometry);
