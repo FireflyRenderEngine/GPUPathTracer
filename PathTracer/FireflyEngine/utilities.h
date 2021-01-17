@@ -31,6 +31,8 @@
 
 #include "kernel.h"
 
+//#define PIXEL_DEBUG
+
 // Timing
 
 struct GpuTimer
@@ -85,32 +87,51 @@ struct GpuTimer
 
 __device__ void print(const char* label, float value)
 {
+#ifdef PIXEL_DEBUG
 	printf("%s: %f\n", label, value);
+#endif
+}
+
+__device__ void print(const char* label, const char* value)
+{
+#ifdef PIXEL_DEBUG
+	printf("%s: %s\n", label, value);
+#endif
 }
 
 __device__ void print(const char* label, int value)
 {
+#ifdef PIXEL_DEBUG
 	printf("%s: %d\n", label, value);
+#endif
 }
 
 __device__ void print(const char* label, size_t value)
 {
+#ifdef PIXEL_DEBUG
 	printf("%s: %d\n", label, value);
+#endif
 }
 
 __device__ void print(const char* label, unsigned int value)
 {
+#ifdef PIXEL_DEBUG
 	printf("%s: %d\n", label, value);
+#endif
 }
 
 __device__ void print(const char* label, glm::vec3 value)
 {
+#ifdef PIXEL_DEBUG
 	printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
+#endif
 }
 
 __device__ void print(const char* label, uchar4 value)
 {
+#ifdef PIXEL_DEBUG
 	printf("%s: %d, %d, %d, %d\n", label, value.x, value.y, value.z, value.w);
+#endif
 }
 
 // ------------------DATA CONTAINER STRUCTS------------------
@@ -248,20 +269,25 @@ struct BXDF
 			// uniform hemisphere sampling: 1 / 2*PI
 			//return CUDART_2_OVER_PI_F * 0.25f;
 		}
+		else if (m_type == BXDFTyp::MIRROR)
+		{
+			return 1.f;
+		}
 	}
 
 	/**
 	 * @brief sampleBsdf samples the bsdf depending on which one it is and sends back the 
 	 *		  glm::vec3 scalar. Along with the randomly sampled bsdf direction and its 
-	 *        (the newly generated sample's) corresponding pdf.
+	 *        (the newly generated sample's) corresponding pdf. The outgoing vector is in world space. So we need to construct TBN in tangent space
 	 * @param outgoing (INPUT): the direction of the previous path segment that intersected with current geom that is going out of the point of intersection
 	 * @param incoming (OUTPUT): the direction that will be sampled based on the bsdf lobe. Incoming here is denoted as incoming because it is assumed this ray is incoming from the emitter
 	 * @param intersect (INPUT): the intersect object containing the normal at the point of intersection
 	 * @param bsdfPDF (OUTPUT): the PDF of the sample we generate based on the lobe
 	 * @param depth (INPUT): depth of the trace currently. Used to generate a unique random seed
+	 * @param isSpecular (INPUT): if the currrent bsdf is specular (transmissive/reflective), we mark this true for NEE calculation
 	 * @return : glm::vec3 scalar value of the object's color information
 	*/
-	__device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, const Intersect& intersect, float& bsdfPDF, int depth)
+	__device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, const Intersect& intersect, float& bsdfPDF, int depth, bool& isSpecular)
 	{
 		//ASSUMPTION: incoming vector points away from the point of intersection
 
@@ -312,9 +338,35 @@ struct BXDF
 			}
 			bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
 			// convert tangent space bsdf sampled direction (incoming) to world space
-			incoming = glm::mat3(tangent, bitangent, intersect.m_normal) * incoming;
+			incoming = glm::normalize(glm::mat3(tangent, bitangent, intersect.m_normal) * incoming);
+			isSpecular = false;
 			// albedo / PI
 			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
+		}
+		else if (m_type == BXDFTyp::MIRROR)
+		{
+			// there's only 1 way for this outgoing ray to bend
+			incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+			bsdfPDF = pdf(outgoing, incoming);
+
+			glm::vec3 tangent, bitangent;
+
+			// we calculate tangent and bitangent only here where we need it
+			// 2 matrix multiplications need to happen with a world space normal:
+			// transpose of the TBN (TangentBitangentNormal) matrix to calculate
+			// the tangent space outgoing direction. So when we sample the bsdf, 
+			// technically we sample the lobe in tangent space.
+			// This means that once we have a tangent space sampled direction (incoming),
+			// we need to convert this to world space
+
+			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
+			//glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
+
+			isSpecular = true;
+			print("abs incoming.z", glm::abs(incoming.z));
+			return m_specularColor/* * (FresnelConductorEvaluate) / (glm::abs(incoming.z))*/;
 		}
 	}
 };
@@ -360,8 +412,8 @@ struct Triangle
 struct Geometry
 {
 	Geometry() = default;
-	Geometry(GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle> triangles = std::vector<Triangle>(), float radius = 0.f)
-		: m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
+	Geometry(const char* name, GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle> triangles = std::vector<Triangle>(), float radius = 0.f)
+		:m_name(name), m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
 	{
 		// Translate Matrix
 		glm::mat4 translateM = glm::translate(glm::mat4(1.0f), m_position);
@@ -462,6 +514,8 @@ struct Geometry
 	int m_numberOfTriangles{ 0 };
 
 	BXDF* m_bxdf{nullptr};
+
+	const char* m_name;
 };
 
 struct Scene

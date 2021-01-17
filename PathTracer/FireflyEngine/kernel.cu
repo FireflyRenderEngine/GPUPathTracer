@@ -180,9 +180,9 @@ __device__ Intersect& intersectRays(const Ray& ray, Geometry* geometries, unsign
  * @brief A helper function to call sampleBsdf of the intersected geometry.
 	Same input/output parameters as BXDF::sampleBsdf. See utilities.h
 */
-__device__ glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& intersect, glm::vec3& incomingRayDirection, Geometry* geometries, float& pdf, int depth)
+__device__ glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& intersect, glm::vec3& incomingRayDirection, Geometry* geometries, float& pdf, int depth, bool& isSpecular)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), incomingRayDirection, intersect, pdf, depth));
+	return (geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), incomingRayDirection, intersect, pdf, depth, isSpecular));
 }
 
 /**
@@ -226,6 +226,8 @@ __device__ Ray& generateRay(Camera camera, int x, int y, int iterations)
  * @param camera (INPUT): the camera object that contains the location, forward, up, near/far clip etc to generate the starting ray to be traced
  * @param numberOfGeometries (INPUT): the total geometries present in the scene and the array "geometries". 
  *									  Since CUDA doesn't take in std::vector, we need to manually send the size of geometries
+ * @param numberOfLights (INPUT): the total lights present in the scene and the array "lights". 
+ *									  Since CUDA doesn't take in std::vector, we need to manually send the size of lights
  * @param iteration (INPUT): the current iteration. Used to average out the renderbuffer radiance (RGB) value.
  * @param maxDepth (INPUT): the maximum depth a ray is allowed to reach before terminating. 
  *							In complex scenes with lot of non-diffuse bsdfs, this needs to be high enough. But beware, the higher the maxDepth, the longer a path takes 
@@ -234,7 +236,6 @@ __device__ Ray& generateRay(Camera camera, int x, int y, int iterations)
  * @return : Fills the surface pointer that is bound to a certain (either FRONT or BACK) renderbuffer. This will be displayed by the framebuffer eventually
 */
 
-//#define PIXEL_DEBUG
 __global__ void launchPathTrace(
 	Geometry* geometries, 
 	unsigned int* lights,
@@ -247,8 +248,8 @@ __global__ void launchPathTrace(
 	glm::vec3* d_pixelColor)
 {
 #ifdef PIXEL_DEBUG
-	int x = 15;
-	int y = 400;
+	int x = 527;
+	int y = 392;
 
 #else
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -298,6 +299,8 @@ __global__ void launchPathTrace(
 		int depth = 0;
 		glm::vec3 thruput(1.f);
 
+		bool lastSpecular = false;
+
 		do
 		{
 			Intersect intersect = intersectRays(outgoingRay, geometries, numberOfGeometries);
@@ -311,14 +314,14 @@ __global__ void launchPathTrace(
 				incomingRay.m_origin = intersect.m_intersectionPoint;
 
 				float pdf;
-				// getBXDF returns 3 things: the bsdf, pdf of that bsdf sample, and the new sampled direction
-				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth);
+				// getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
+				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
 
 				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 				{
-#define NEE
+//#define NEE
 #ifdef NEE
-					if (depth > 0)
+					if (depth > 0 && !lastSpecular)
 					{
 						break;
 					}
@@ -336,46 +339,47 @@ __global__ void launchPathTrace(
 					float dotProd = glm::abs(glm::dot(incomingRay.m_direction, intersect.m_normal));
 					thruput *= dotProd * (bxdf / pdf);
 
-
 #ifdef NEE
-					// NEE: we didn't hit a light, so we sample a point on a randomly selected light
-					curandState state1;
-					curandState state2;
-
-					curand_init((unsigned long long)clock() + x, x, 0, &state1);
-					unsigned int lightIdx = curand_uniform(&state1) * numberOfLights;
-
-
-					curand_init((unsigned long long)clock() + y, y, 0, &state2);
-					glm::vec2 sample(curand_uniform(&state1), curand_uniform(&state1));
-
-					Intersect randomLightSample = geometries[lights[lightIdx]].sampleLight(sample);
-
-					glm::vec3 shadowRayDirection = randomLightSample.m_intersectionPoint - intersect.m_intersectionPoint;
-
-					float lengthSquared = glm::length(shadowRayDirection);
-					lengthSquared *= lengthSquared;
-					shadowRayDirection = glm::normalize(shadowRayDirection);
-					float cosT = glm::dot(intersect.m_normal, shadowRayDirection);
-
-
-					if (cosT > 0.f)
+					if (geometries[intersect.geometryIndex].m_bxdf->m_type != BXDFTyp::MIRROR)
 					{
-						glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
-						Ray shadowRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, shadowRayDirection);
-						Intersect lightIntersect = intersectRays(shadowRay, geometries, numberOfGeometries);
+						// NEE: we didn't hit a light, so we sample a point on a randomly selected light
+						curandState state1;
+						curandState state2;
 
-						if (lightIntersect.geometryIndex == lights[lightIdx] && geometries[lightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+						curand_init((unsigned long long)clock() + x, x, 0, &state1);
+						unsigned int lightIdx = curand_uniform(&state1) * numberOfLights;
+
+
+						curand_init((unsigned long long)clock() + y, y, 0, &state2);
+						glm::vec2 sample(curand_uniform(&state1), curand_uniform(&state1));
+
+						Intersect randomLightSample = geometries[lights[lightIdx]].sampleLight(sample);
+
+						glm::vec3 shadowRayDirection = randomLightSample.m_intersectionPoint - intersect.m_intersectionPoint;
+
+						float lengthSquared = glm::length(shadowRayDirection);
+						lengthSquared *= lengthSquared;
+						shadowRayDirection = glm::normalize(shadowRayDirection);
+						float cosT = glm::dot(intersect.m_normal, shadowRayDirection);
+
+						if (cosT > 0.f)
 						{
-							float cosP = glm::dot(-shadowRayDirection, lightIntersect.m_normal);
+							glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
+							Ray shadowRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, shadowRayDirection);
+							Intersect lightIntersect = intersectRays(shadowRay, geometries, numberOfGeometries);
 
-							glm::vec3 lightBxdf = cosP > 0.f ? geometries[lightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[lightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
-							glm::vec3 directLighting = static_cast<float>(numberOfLights) * lightBxdf * cosT * cosP * geometries[lightIntersect.geometryIndex].m_surfaceArea / lengthSquared;
-							pixelColorPerSample += directLighting * thruput;
+							if (lightIntersect.geometryIndex == lights[lightIdx] && geometries[lightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+							{
+								float cosP = glm::dot(-shadowRayDirection, lightIntersect.m_normal);
+
+								glm::vec3 lightBxdf = cosP > 0.f ? geometries[lightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[lightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
+								glm::vec3 directLighting = static_cast<float>(numberOfLights) * lightBxdf * cosT * cosP * geometries[lightIntersect.geometryIndex].m_surfaceArea / lengthSquared;
+								pixelColorPerSample += directLighting * thruput;
+							}
 						}
 					}
 #endif
-
+					
 				}
 				else
 				{
@@ -468,15 +472,14 @@ int main()
 
 	std::vector<Triangle> trianglesInMesh;
 	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
-	Geometry* triangleMeshGeometry = new Geometry(GeometryType::TRIANGLEMESH, glm::vec3(0.f, -0.5f, 0.f), glm::vec3(0.0f, 180.0f, 0.0f), glm::vec3(1.5f), trianglesInMesh);
-
-	Geometry* topPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
-	Geometry* leftPlaneLightGeometry = new Geometry(GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
-	Geometry* bottomPlaneWhiteGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(-90.f, 0.f, 0.f), glm::vec3(15.f));
-	Geometry* topPlaneWhiteGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
-	Geometry* backPlaneWhiteGeometry = new Geometry(GeometryType::PLANE, glm::vec3(0.f, 0.f, -7.5f), glm::vec3(0.f), glm::vec3(15.f));
-	Geometry* leftPlaneRedGeometry = new Geometry(GeometryType::PLANE, glm::vec3(-7.5f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(15.f));
-	Geometry* rightPlaneGreenGeometry = new Geometry(GeometryType::PLANE, glm::vec3(7.5f, 0.f, 0.f), glm::vec3(0.f, -90.f, 0.f), glm::vec3(15.f));
+	Geometry* triangleMeshGeometry = new Geometry("sphere",GeometryType::TRIANGLEMESH, glm::vec3(0.f, -0.5f, 0.f), glm::vec3(0.0f, 180.0f, 0.0f), glm::vec3(1.5f), trianglesInMesh);
+	Geometry* topPlaneLightGeometry = new Geometry("ceiling light", GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry* leftPlaneLightGeometry = new Geometry("left light", GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
+	Geometry* bottomPlaneWhiteGeometry = new Geometry("floor", GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(-90.f, 0.f, 0.f), glm::vec3(15.f));
+	Geometry* topPlaneWhiteGeometry = new Geometry("ceiling", GeometryType::PLANE, glm::vec3(0.f, 7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
+	Geometry* backPlaneWhiteGeometry = new Geometry("back plane", GeometryType::PLANE, glm::vec3(0.f, 0.f, -7.5f), glm::vec3(0.f), glm::vec3(15.f));
+	Geometry* leftPlaneRedGeometry = new Geometry("red wall", GeometryType::PLANE, glm::vec3(-7.5f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(15.f));
+	Geometry* rightPlaneGreenGeometry = new Geometry("green wall", GeometryType::PLANE, glm::vec3(7.5f, 0.f, 0.f), glm::vec3(0.f, -90.f, 0.f), glm::vec3(15.f));
 
 
 	BXDF* diffusebxdfREDMesh = new BXDF();
@@ -504,7 +507,11 @@ int main()
 	lightbxdfPlane->m_intensity = 1.0f;
 	lightbxdfPlane->m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry->m_bxdf = diffusebxdfWHITEMesh;
+	BXDF* specularbxdfWHITEMesh = new BXDF();
+	specularbxdfWHITEMesh->m_type = BXDFTyp::MIRROR;
+	specularbxdfWHITEMesh->m_specularColor = { 1.f, 1.f, 1.f };
+
+	triangleMeshGeometry->m_bxdf = specularbxdfWHITEMesh;
 	bottomPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry->m_bxdf = diffusebxdfWHITEMesh;
@@ -563,6 +570,16 @@ int main()
 		cudaMemcpy(&(state.d_geometry[i].m_bxdf), &hostBXDFData, sizeof(BXDF*), cudaMemcpyHostToDevice);
 		cudaCheckErrors("cudaMemcpy device bxdf data fail");
 
+#ifdef PIXEL_DEBUG
+		const char* hostNames;
+		cudaMallocManaged((void**)&hostNames, sizeof(const char*));
+		cudaCheckErrors("cudaMalloc host name data fail");
+		cudaMemcpy(const_cast<char*>(hostNames), geometries[i].m_name, sizeof(const char*), cudaMemcpyHostToDevice);
+		cudaCheckErrors("cudaMemcpy host name data fail");
+		cudaMemcpy(&(state.d_geometry[i].m_name), &hostNames, sizeof(const char*), cudaMemcpyHostToDevice);
+		cudaCheckErrors("cudaMemcpy device name data fail");
+#endif
+
 		if (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH)
 		{
 			// TODO: Figure out a better way to allocate and deallocate this hostTriangleData
@@ -603,7 +620,7 @@ int main()
 
 	int iteration = 1;
 
-	int maxDepth = 4;
+	int maxDepth = 6;
 	int samplesPerPixel = 4;
 
 	GpuTimer timer;
