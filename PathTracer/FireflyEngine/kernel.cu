@@ -394,7 +394,7 @@ cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
 __global__ void CreateWorldAABB(Geometry* geometries, size_t numGeometries, int numOfPrimitives, AABB* AABBArray) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	
-	if (index < numOfPrimitives) {
+	if (index > numOfPrimitives) {
 		return;
 	}
 
@@ -404,10 +404,10 @@ __global__ void CreateWorldAABB(Geometry* geometries, size_t numGeometries, int 
 		primitiveCount += (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH) ? geometries[i].m_numberOfTriangles : 1;
 		if (index < primitiveCount) {
 			if (geometries[i].m_geometryType != GeometryType::TRIANGLEMESH) {
-				AABBArray[index] = BuildAABB(geometries[i], -1);
+				 BuildAABB(AABBArray[index], geometries[i], i, -1);
 			}
 			else {
-				AABBArray[index] = BuildAABB(geometries[i], index - i);
+				 BuildAABB(AABBArray[index], geometries[i], i, index - i);
 			}
 		}
 	}
@@ -551,6 +551,13 @@ int main()
 	int blockSize = 256;
 	int numBlocks = (GetTotalPrimitiveCount(geometries) + 1) / blockSize;
 	CreateWorldAABB << <numBlocks, blockSize >> > (state.d_geometry, geometries.size(), GetTotalPrimitiveCount(geometries), state.d_AABB);
+	// Get the memory back from the GPU to CPU
+	std::vector<AABB> aabbArray; 
+	aabbArray.resize(GetTotalPrimitiveCount(geometries));
+	cudaMemcpy(aabbArray.data(), state.d_AABB, GetTotalPrimitiveCount(geometries), cudaMemcpyDeviceToHost);
+	//Create K-D Tree
+	std::shared_ptr<KDTree> kdTree = std::make_shared<KDTree>(aabbArray, 0, 2);
+
 
 	// Now we will save the internal triangle data to device memory
 	for (int i = 0; i < geometries.size(); ++i)

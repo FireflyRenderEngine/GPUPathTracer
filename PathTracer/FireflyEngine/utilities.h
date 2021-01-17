@@ -17,6 +17,9 @@
 
 #include <curand.h>
 #include <curand_kernel.h>
+#include <algorithm>
+#include <functional>
+#include <time.h>
 
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
 #include "tiny_obj_loader.h"
@@ -384,10 +387,14 @@ struct Geometry
 	BXDF* m_bxdf{nullptr};
 };
 
+struct GeometryIndex {
+	int m_geometryArrayIndex, m_geometryArrayTriangleIndex;
+};
+
 struct AABB {
 	glm::vec3 m_minBound;
 	glm::vec3 m_maxBound;
-	int m_geometryArrayIndex, m_geometryArrayTriangleIindex;
+	GeometryIndex m_gometryIndex;
 
 	// Default const.
 	__device__ AABB() {}
@@ -404,7 +411,7 @@ struct AABB {
 		m_maxBound = aabb.m_maxBound;
 	}
 	
-	__device__ void UpdateBounds(glm::vec3 point)
+	__host__ __device__ void UpdateBounds(glm::vec3 point)
 	{
 		//X
 		if (m_minBound.x > point.x) {
@@ -430,11 +437,40 @@ struct AABB {
 			m_maxBound.z = point.z;
 		}
 	}
+
+	__device__ Intersect& GetIntersection() {}
 };
 
-__device__ AABB& BuildAABB(Geometry& geometry, int triangleIndex)
+struct {
+	bool operator()(AABB a, AABB b) const { return a.m_minBound.x < b.m_minBound.x; }
+} sortByX;
+struct {
+	bool operator()(AABB a, AABB b) const { return a.m_minBound.y < b.m_minBound.y; }
+} sortByY;
+struct {
+	bool operator()(AABB a, AABB b) const { return a.m_minBound.z < b.m_minBound.z; }
+} sortByZ;
+
+void SortAABB(std::vector<AABB>& AABBArray, int divAxis)
 {
-	AABB aabb;
+	switch (divAxis)
+	{
+	case 0:
+		std::sort(AABBArray.begin(), AABBArray.end(), sortByX);
+		break;
+
+	case 1:
+		std::sort(AABBArray.begin(), AABBArray.end(), sortByY);
+		break;
+
+	case 2:
+		std::sort(AABBArray.begin(), AABBArray.end(), sortByZ);
+		break;
+	}
+}
+
+__device__ void BuildAABB(AABB& aabb, Geometry& geometry, int geometryArrayIndex, int triangleIndex)
+{
 	if (geometry.m_geometryType == GeometryType::PLANE)
 	{
 		// The plane is bound between -0.5 <-> 0.5 on the X and Y plane in the object space.
@@ -465,7 +501,8 @@ __device__ AABB& BuildAABB(Geometry& geometry, int triangleIndex)
 		aabb.UpdateBounds(vertex2);
 		aabb.UpdateBounds(vertex3);
 	}
-	return aabb;
+	aabb.m_gometryIndex.m_geometryArrayIndex = geometryArrayIndex;
+	aabb.m_gometryIndex.m_geometryArrayTriangleIndex = triangleIndex;
 }
 
 struct Scene
@@ -1081,3 +1118,78 @@ void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& i
 		time = 0.f;
 	}
 }
+
+struct KDNode {
+	KDNode() {}
+	KDNode* m_lChild = nullptr;
+	KDNode* m_rChild = nullptr;
+	AABB m_AABB; // This is the AABB that encompasses all the meshes inside
+	bool m_isLeafNode{false};
+	
+	GeometryIndex* m_indexArray = nullptr;
+};
+
+struct KDTree {
+	KDTree(std::vector<AABB>& AABBArray, int divAxis, int minLeafNodeCount) {
+		m_rootNode = BuildKDTree(AABBArray,divAxis,minLeafNodeCount);
+	}
+
+	KDNode* m_rootNode;
+	
+	void ConsolidateAABB(std::vector<AABB>& AABBArray, KDNode* newNode) {
+		for (int i = 0; i < AABBArray.size(); ++i) {
+			newNode->m_AABB.UpdateBounds(AABBArray[i].m_minBound);
+			newNode->m_AABB.UpdateBounds(AABBArray[i].m_maxBound);
+		}
+	}
+
+	KDNode* BuildKDTree(std::vector<AABB>& AABBArray, int divAxis, int minLeafNodeCount)
+	{
+		// LEAF NODE: Check if number of elements in the AABB are less than or equal to the minimum leaf node count
+		if (AABBArray.size() <= minLeafNodeCount)
+		{
+			// This is going to be a leaf node
+			KDNode* newNode = new KDNode();
+			newNode->m_isLeafNode = true;
+
+			// Create the array of geometry indixes that are used to index into the main geometry array
+			newNode->m_indexArray = new GeometryIndex[minLeafNodeCount];
+			for (int i = 0; i < minLeafNodeCount; ++i) {
+				newNode->m_indexArray[i].m_geometryArrayIndex = AABBArray[i].m_gometryIndex.m_geometryArrayIndex;
+				newNode->m_indexArray[i].m_geometryArrayTriangleIndex = AABBArray[i].m_gometryIndex.m_geometryArrayTriangleIndex;
+			}
+
+			ConsolidateAABB(AABBArray, newNode);
+			return newNode;
+		}
+
+		// NOT LEAF NODE
+		// Sort the AABB along the division axis
+		SortAABB(AABBArray, divAxis);
+		// Create a new node
+		KDNode* newNode = new KDNode();
+		ConsolidateAABB(AABBArray, newNode);
+		// Division method: Median
+		int median = AABBArray.size() / 2;
+
+		// Create local sub arrays that will be used to generate the left and right sections of the K-D Tree
+		// LEFT
+		std::vector<AABB> leftAABBArray;
+		// fill in the array
+		leftAABBArray.insert(leftAABBArray.begin(), AABBArray.begin(), AABBArray.begin() + (median-1));
+		
+		// RIGHT
+		std::vector<AABB> rightAABBArray;
+		// FIll in the array
+		rightAABBArray.insert(rightAABBArray.begin(), AABBArray.begin() + median, AABBArray.end());
+
+		// Recursively call the BuildKDtree function for the left and right sub tree
+		int newDivAxis = ((divAxis + 1) < 2) ? divAxis + 1 : divAxis - 3;
+		newNode->m_lChild = BuildKDTree(leftAABBArray, newDivAxis, minLeafNodeCount);
+		newNode->m_rChild = BuildKDTree(rightAABBArray, newDivAxis, minLeafNodeCount);
+		
+		return newNode;
+ 	}
+
+	__device__ Intersect& FindIntersection() {}
+};
