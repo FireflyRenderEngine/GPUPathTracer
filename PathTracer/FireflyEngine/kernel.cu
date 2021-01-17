@@ -236,6 +236,9 @@ __device__ Ray& generateRay(Camera camera, int x, int y, int iterations)
  * @return : Fills the surface pointer that is bound to a certain (either FRONT or BACK) renderbuffer. This will be displayed by the framebuffer eventually
 */
 
+// documentation for NEE:
+// http://www.cs.uu.nl/docs/vakken/magr/portfolio/INFOMAGR/lecture8.pdf
+
 __global__ void launchPathTrace(
 	Geometry* geometries, 
 	unsigned int* lights,
