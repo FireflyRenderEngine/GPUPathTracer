@@ -1,7 +1,6 @@
 struct Geometry;
 struct Ray;
 struct Camera;
-struct AABB;
 #include "vec3.hpp"
 #include "glm.hpp"
 
@@ -14,8 +13,4 @@ struct PathTracerState
 {
 	// device side variables
 	Geometry* d_geometry{ nullptr };
-	glm::vec3* d_pixels{ nullptr };
-	Camera* d_camera{ nullptr };
-	AABB* d_AABB{ nullptr };
-	unsigned int d_raytracableObjects{ 0 };
 };

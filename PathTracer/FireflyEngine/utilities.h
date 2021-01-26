@@ -85,49 +85,49 @@ struct GpuTimer
         } \
     } while (0)
 
-__device__ void print(const char* label, float value)
+__device__ inline void print(const char* label, float value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %f\n", label, value);
 #endif
 }
 
-__device__ void print(const char* label, const char* value)
+__device__ inline void print(const char* label, const char* value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %s\n", label, value);
 #endif
 }
 
-__device__ void print(const char* label, int value)
+__device__ inline  void print(const char* label, int value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %d\n", label, value);
 #endif
 }
 
-__device__ void print(const char* label, size_t value)
+__device__ inline  void print(const char* label, size_t value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %d\n", label, value);
 #endif
 }
 
-__device__ void print(const char* label, unsigned int value)
+__device__ inline  void print(const char* label, unsigned int value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %d\n", label, value);
 #endif
 }
 
-__device__ void print(const char* label, glm::vec3 value)
+__device__ inline  void print(const char* label, glm::vec3 value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
 #endif
 }
 
-__device__ void print(const char* label, uchar4 value)
+__device__ inline  void print(const char* label, uchar4 value)
 {
 #ifdef PIXEL_DEBUG
 	printf("%s: %d, %d, %d, %d\n", label, value.x, value.y, value.z, value.w);
@@ -136,12 +136,12 @@ __device__ void print(const char* label, uchar4 value)
 
 // ------------------DATA CONTAINER STRUCTS------------------
 
-__device__ bool isBlack(glm::vec3 color)
+__device__ inline  bool isBlack(glm::vec3 color)
 {
 	return color.x <= RAY_EPSILON && color.y <= RAY_EPSILON && color.z <= RAY_EPSILON;
 }
 
-__device__ glm::vec2 ConcentricSampleDisk(float u1, float u2)
+__device__ inline  glm::vec2 ConcentricSampleDisk(float u1, float u2)
 {
 	glm::vec2 uOffset = 2.0f * glm::vec2(u1, u2) - glm::vec2(1.0f);
 	if (uOffset.x == 0.0f && uOffset.y == 0.0f) 
@@ -163,14 +163,14 @@ __device__ glm::vec2 ConcentricSampleDisk(float u1, float u2)
 	return r * glm::vec2(glm::cos(theta), glm::sin(theta));
 }
 
-__device__ glm::vec3 CosineSampleHemisphere(float u1, float u2)
+__device__ inline  glm::vec3 CosineSampleHemisphere(float u1, float u2)
 {
 	glm::vec2 d = ConcentricSampleDisk(u1, u2);
 	float z = glm::sqrt(glm::max(0.f, 1.0f - d.x * d.x - d.y * d.y));
 	return glm::vec3(d.x, d.y, z);
 }
 
-__device__ glm::vec3 UniformHemisphereSample(float u1, float u2)
+__device__ inline  glm::vec3 UniformHemisphereSample(float u1, float u2)
 {
 	const float r = sqrt(1.0f - u1 * u1);
 	const float phi = 2 * CUDART_PI_F * u2;
@@ -184,7 +184,6 @@ struct Intersect
 	glm::vec3 m_intersectionPoint;
 	glm::vec3 m_normal;
 	float m_t{ 0.f };
-	bool m_hit{ false };
 	int geometryIndex{ -1 };
 	int triangleIndex{ -1 };
 };
@@ -258,21 +257,42 @@ struct BXDF
 	__device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming)
 	{
 		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-
-		//only diffuse for now
-		//TODO: add pdf for every other material type
 		if (m_type == BXDFTyp::DIFFUSE)
 		{
 			// cosine weighted hemisphere sampling: cosTheta / PI
-			return incoming.z * outgoing.z > 0.f ? glm::abs(incoming.z) / CUDART_PI_F : 0.f;
+			return incoming.z * outgoing.z > 0.f ? glm::abs(incoming.z) * CUDART_2_OVER_PI_F * 0.5f : 0.f;
 
 			// uniform hemisphere sampling: 1 / 2*PI
 			//return CUDART_2_OVER_PI_F * 0.25f;
 		}
-		else if (m_type == BXDFTyp::MIRROR)
+		else if (m_type == BXDFTyp::MIRROR || m_type == BXDFTyp::GLASS)
 		{
 			return 1.f;
 		}
+		return {};
+	}
+
+	__device__ glm::vec3 faceForward(const glm::vec3& n, const glm::vec3& v)
+	{
+		return (glm::dot(n, v) < 0.f) ? -n : n;
+	}
+
+	__device__ bool refract(const glm::vec3& wi, const glm::vec3& normal, float eta, glm::vec3& wo)
+	{
+		float cosThetaI = glm::dot(normal, wi);
+		float sin2ThetaI = glm::max(0.f, 1.f - cosThetaI * cosThetaI);
+		float sin2ThetaT = eta * eta * sin2ThetaI;
+		// Handle total internal reflection for transmission 
+		if (sin2ThetaT >= 1.f)
+		{
+			wo = glm::reflect(-wi, normal);
+			return true;
+		}
+
+		float cosThetaT = glm::sqrt(1.f - sin2ThetaT);
+
+		wo = eta * -wi + (eta * cosThetaI - cosThetaT) * normal;
+		return true;
 	}
 
 	/**
@@ -295,15 +315,11 @@ struct BXDF
 		{
 			// CLARIFICATION: we assume that all area lights are two-sided
 			bool twoSided = true;
-			incoming = glm::vec3(0, 0, 0);
+			incoming = glm::vec3(0.f);
 			// means we have a light source
-			return (intersect.m_t >= 0 && (twoSided || glm::dot(intersect.m_normal, outgoing) > 0)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);
+			return ((twoSided || glm::dot(intersect.m_normal, outgoing) > 0.f)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);
 		}
-
-		//else other materials
-
-		//only diffuse for now
-		//TODO: add bsdf for every other material type
+		
 		if (m_type == BXDFTyp::DIFFUSE)
 		{
 			// sample a point on hemisphere to return an outgoing ray
@@ -330,12 +346,13 @@ struct BXDF
 			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
 			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
-			incoming = UniformHemisphereSample(sample[0], sample[1]);
+			//incoming = UniformHemisphereSample(sample[0], sample[1]);
 			incoming = CosineSampleHemisphere(sample[0], sample[1]);
 			if (tangentSpaceOutgoing.z < 0.f)
 			{
 				incoming.z *= -1.f;
 			}
+			
 			bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
 			// convert tangent space bsdf sampled direction (incoming) to world space
 			incoming = glm::normalize(glm::mat3(tangent, bitangent, intersect.m_normal) * incoming);
@@ -349,25 +366,29 @@ struct BXDF
 			incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
 			bsdfPDF = pdf(outgoing, incoming);
 
-			glm::vec3 tangent, bitangent;
-
-			// we calculate tangent and bitangent only here where we need it
-			// 2 matrix multiplications need to happen with a world space normal:
-			// transpose of the TBN (TangentBitangentNormal) matrix to calculate
-			// the tangent space outgoing direction. So when we sample the bsdf, 
-			// technically we sample the lobe in tangent space.
-			// This means that once we have a tangent space sampled direction (incoming),
-			// we need to convert this to world space
-
-			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
-			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
-			//glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
-
 			isSpecular = true;
-			print("abs incoming.z", glm::abs(incoming.z));
-			return m_specularColor/* * (FresnelConductorEvaluate) / (glm::abs(incoming.z))*/;
+			return m_specularColor /** (FresnelConductorEvaluate)*/ / glm::abs(glm::dot(incoming, intersect.m_normal));
 		}
+		else if (m_type == BXDFTyp::GLASS)
+		{
+			
+			// there's only 1 way for this outgoing ray to bend
+			float airRefractiveIndex = 1.f;
+			float eta = glm::dot(intersect.m_normal, outgoing) > 0 ?  airRefractiveIndex / m_refractiveIndex  : m_refractiveIndex / airRefractiveIndex;
+			
+			isSpecular = true;
+			bool refracted = refract(outgoing, faceForward(intersect.m_normal, outgoing), eta, incoming);
+			if (refracted)
+			{
+				incoming = glm::normalize(incoming);
+				bsdfPDF = pdf(outgoing, incoming);
+				
+				return m_transmittanceColor/* * (FresnelConductorEvaluate)*/ / glm::abs(glm::dot(incoming, intersect.m_normal));
+			}
+			bsdfPDF = -1.f;
+			return glm::vec3(0.f);
+		}
+		return {};
 	}
 };
 
@@ -388,6 +409,11 @@ struct Triangle
 		m_uv0(uv0), m_uv1(uv1), m_uv2(uv2),
 		m_n0(n0), m_n1(n1), m_n2(n2)
 	{
+		edge0 = v1 - v0, edge1 = v2 - v0;
+		d00 = glm::dot(edge0, edge0);
+		d01 = glm::dot(edge0, edge1);
+		d11 = glm::dot(edge1, edge1);
+		invDenom = 1.f / (d00 * d11 - d01 * d01);
 	}
 
 	float area() const
@@ -407,6 +433,14 @@ struct Triangle
 	glm::vec3 m_n0;
 	glm::vec3 m_n1;
 	glm::vec3 m_n2;
+
+	// for barycentric calculations
+	glm::vec3 edge0;
+	glm::vec3 edge1;
+	float d00;
+	float d01;
+	float d11;
+	float invDenom;
 };
 
 struct Geometry
@@ -441,7 +475,7 @@ struct Geometry
 			{
 				if (triangles.empty())
 					return;
-				m_numberOfTriangles = (triangles).size();
+				m_numberOfTriangles = static_cast<int>(triangles.size());
 				m_triangles = new Triangle[m_numberOfTriangles];
 				for (int i = 0; i < m_numberOfTriangles; ++i)
 				{
@@ -455,15 +489,14 @@ struct Geometry
 		}
 	}
 
-	__device__ Intersect& sampleLight(glm::vec2 sample) const
+	__device__ bool sampleLight(glm::vec2 sample, Intersect& worldSpaceIntersect) const
 	{
-		Intersect worldSpaceObj;
-
+		bool sampledLight = false;
 		if (m_geometryType == GeometryType::PLANE)
 		{
 			// transform sample to world space
-			worldSpaceObj.m_intersectionPoint = m_modelMatrix * glm::vec4(sample.x - 0.5f, sample.y - 0.5f, 0.f, 1.f);
-			worldSpaceObj.m_normal = glm::normalize(m_invTransModelMatrix * glm::vec4(m_normal, 0.f));
+			worldSpaceIntersect.m_intersectionPoint = m_modelMatrix * glm::vec4(sample.x - 0.5f, sample.y - 0.5f, 0.f, 1.f);
+			sampledLight = true;
 		}
 		if (m_geometryType == GeometryType::TRIANGLEMESH)
 		{
@@ -475,20 +508,12 @@ struct Geometry
 
 			float su0 = std::sqrt(sample[0]);
 			glm::vec2 uniformPointOnTriangle(1 - su0, sample[1] * su0);
-			worldSpaceObj.m_intersectionPoint = uniformPointOnTriangle[0] * randomlySampleTriangle.m_v0 + 
+			worldSpaceIntersect.m_intersectionPoint = m_modelMatrix * glm::vec4(uniformPointOnTriangle[0] * randomlySampleTriangle.m_v0 +
 												uniformPointOnTriangle[1] * randomlySampleTriangle.m_v1 + 
-												(1 - uniformPointOnTriangle[0] - uniformPointOnTriangle[1]) * randomlySampleTriangle.m_v2;
-			glm::vec3 intersectPoint = worldSpaceObj.m_intersectionPoint;
-
-			// Calculate the normal using barycentric coordinates
-			float denom = (randomlySampleTriangle.m_v1.y - randomlySampleTriangle.m_v2.y) * (randomlySampleTriangle.m_v0.x - randomlySampleTriangle.m_v2.x) + (randomlySampleTriangle.m_v2.x - randomlySampleTriangle.m_v1.x) * (randomlySampleTriangle.m_v0.y - randomlySampleTriangle.m_v2.y);
-			float wv1 = ((randomlySampleTriangle.m_v1.y - randomlySampleTriangle.m_v2.y) * (intersectPoint.x - randomlySampleTriangle.m_v2.x) + (randomlySampleTriangle.m_v2.x - randomlySampleTriangle.m_v1.x) * (intersectPoint.y - randomlySampleTriangle.m_v2.y)) / denom;
-			float wv2 = ((randomlySampleTriangle.m_v2.y - randomlySampleTriangle.m_v0.y) * (intersectPoint.x - randomlySampleTriangle.m_v2.x) + (randomlySampleTriangle.m_v0.x - randomlySampleTriangle.m_v2.x) * (intersectPoint.y - randomlySampleTriangle.m_v2.y)) / denom;
-			float wv3 = 1 - wv1 - wv2;
-			worldSpaceObj.m_normal = glm::normalize((wv1 * randomlySampleTriangle.m_n0) + (wv2 * randomlySampleTriangle.m_n1) + (wv3 * randomlySampleTriangle.m_n2));
-
+												(1 - uniformPointOnTriangle[0] - uniformPointOnTriangle[1]) * randomlySampleTriangle.m_v2, 1.f);
+			sampledLight = true;
 		}
-		return worldSpaceObj;
+		return sampledLight;
 	}
 
 	// Types:
@@ -516,27 +541,6 @@ struct Geometry
 	BXDF* m_bxdf{nullptr};
 
 	const char* m_name;
-};
-
-struct Scene
-{
-	Scene() = default;
-	Scene(std::vector<Geometry*> geometries)
-	{
-		m_geometrySize = geometries.size();
-		m_geometries = new Geometry[m_geometrySize];
-		for (int i = 0; i < m_geometrySize; ++i) 
-		{
-			m_geometries[i] = *(geometries[i]);
-		}
-	}
-
-	~Scene() 
-	{
-		delete m_geometries;
-	}
-	Geometry* m_geometries;
-	int m_geometrySize;
 };
 
 struct Ray
@@ -857,11 +861,6 @@ struct GLFWViewer
 		cuda_err = (cudaSetDevice(cuda_device_id));
 
 		//
-		// MULTI-GPU?
-		//
-		const bool multi_gpu = gl_device_id != cuda_device_id;
-
-		//
 		// INFO
 		//
 		struct cudaDeviceProp props;
@@ -971,23 +970,23 @@ void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
 	std::string err;
 
 	bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, meshFilePath.c_str());
-
+	
 	if (!warn.empty())
 	{
-		std::cout << warn << std::endl;
+		printf("warn:%s\n", warn.c_str());
 	}
-
+	
 	if (!err.empty())
 	{
-		std::cerr << err << std::endl;
+		printf("err:%s\n", err.c_str());
 	}
 
 	if (!ret)
 	{
-		std::cout << "Error loading mesh";
+		printf("Error loading mesh\n");
 		return;
 	}
-
+	
 	// Loop over shapes
 	for (size_t s = 0; s < shapes.size(); s++) {
 		// Loop over faces(polygon)
@@ -1004,7 +1003,14 @@ void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
 				tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
 				triangleVertices.push_back(glm::vec3(attrib.vertices[3 * idx.vertex_index + 0], attrib.vertices[3 * idx.vertex_index + 1], attrib.vertices[3 * idx.vertex_index + 2]));
 				triangleNormals.push_back(glm::vec3(attrib.normals[3 * idx.normal_index + 0], attrib.normals[3 * idx.normal_index + 1], attrib.normals[3 * idx.normal_index + 2]));
-				triangleUVS.push_back(glm::vec2(attrib.texcoords[2 * idx.texcoord_index + 0], attrib.texcoords[2 * idx.texcoord_index + 1]));
+				if (!attrib.texcoords.empty())
+				{
+					triangleUVS.push_back(glm::vec2(attrib.texcoords[2 * idx.texcoord_index + 0], attrib.texcoords[2 * idx.texcoord_index + 1]));
+				}
+				else
+				{
+					triangleUVS.push_back({ 0.f,0.f });
+				}
 				// Optional: vertex colors
 				// tinyobj::real_t red = attrib.colors[3*idx.vertex_index+0];
 				// tinyobj::real_t green = attrib.colors[3*idx.vertex_index+1];
@@ -1017,7 +1023,7 @@ void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
 			trianglesInMesh.push_back(newTriangle);
 
 			// per-face material
-			shapes[s].mesh.material_ids[f];
+			//shapes[s].mesh.material_ids[f];
 		}
 	}
 }
