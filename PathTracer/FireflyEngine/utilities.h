@@ -211,7 +211,7 @@ enum BXDFTyp
  * this forms the tangent. To get the bitangent, all we need to do is get the
  * cross product between normal and tangent.
  ******************************************************************************/
-__device__ void calculateCoordinateAxes(glm::vec3 normal, glm::vec3& tangent, glm::vec3& bitangent)
+__device__ inline void calculateCoordinateAxes(glm::vec3 normal, glm::vec3& tangent, glm::vec3& bitangent)
 {
 #ifdef DUFF_ONB
 	// Duff et al. Building an Orthonormal Basis, Revisited:

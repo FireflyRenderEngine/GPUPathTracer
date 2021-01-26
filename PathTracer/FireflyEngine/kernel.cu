@@ -8,7 +8,7 @@
 
 surface<void, cudaSurfaceType2D> surf;
 
-__device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect& intersect)
+__device__ inline bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect& intersect)
 {
 	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 	float denom = glm::dot(plane.m_normal, ray.m_direction);
@@ -35,7 +35,7 @@ __device__ bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect&
 }
 
 // fast Triangle intersection : https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf
-__device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Intersect& intersect)
+__device__ inline  bool intersectTriangle(const Triangle& triangle, const Ray& ray, Intersect& intersect)
 {
 	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 	const float EPSILON = RAY_EPSILON;
@@ -93,7 +93,7 @@ __device__ bool intersectTriangle(const Triangle& triangle, const Ray& ray, Inte
 	}
 }
 
-__device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 modelMatrix,const Ray& ray)
+__device__ inline  bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 modelMatrix,const Ray& ray)
 {
 	// convert point of intersection into world space
 	glm::vec3 worldPOI = modelMatrix * glm::vec4(objectSpaceIntersect.m_intersectionPoint, 1.0f);
@@ -111,7 +111,7 @@ __device__ bool setIntersection(float& tMax, Intersect& intersectOut, const Inte
 	return false;
 }
 
-__device__ bool intersectRays(const Ray& ray, Geometry* geometries, unsigned int raytracableObjects, Intersect& intersectOut)
+__device__ inline  bool intersectRays(const Ray& ray, Geometry* geometries, unsigned int raytracableObjects, Intersect& intersectOut)
 {
 	// This is the global intersect that stores the intersect info in world space
 	bool objectHit = false;
@@ -180,7 +180,7 @@ __device__ bool intersectRays(const Ray& ray, Geometry* geometries, unsigned int
  * @brief A helper function to call sampleBsdf of the intersected geometry.
 	Same input/output parameters as BXDF::sampleBsdf. See utilities.h
 */
-__device__ glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& intersect, glm::vec3& incomingRayDirection, Geometry* geometries, float& pdf, int depth, bool& isSpecular)
+__device__ inline  glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& intersect, glm::vec3& incomingRayDirection, Geometry* geometries, float& pdf, int depth, bool& isSpecular)
 {
 	return (geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), incomingRayDirection, intersect, pdf, depth, isSpecular));
 }
@@ -193,7 +193,7 @@ __device__ glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& intersect,
  * @param iterations (INPUT): the current iteration. Used to generate a unique seed for the random number generator
  * @return: a Ray which contains the origin and the newly generated direction
 */
-__device__ bool generateRay(Camera camera, int x, int y, Ray& ray)
+__device__ inline  bool generateRay(Camera camera, int x, int y, Ray& ray)
 {
 	// TODO: add depth of field
 	ray.m_origin = camera.m_position;
