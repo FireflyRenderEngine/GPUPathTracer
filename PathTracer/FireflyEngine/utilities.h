@@ -150,7 +150,7 @@ __device__ inline  glm::vec2 ConcentricSampleDisk(float u1, float u2)
 	}
 
 	float theta, r;
-	if (glm::abs(uOffset.x) > glm::abs(uOffset.y)) 
+	if (fabsf(uOffset.x) > fabsf(uOffset.y))
 	{
 		r = uOffset.x;
 		theta = CUDART_PIO4_F * (uOffset.y / uOffset.x);
@@ -160,22 +160,22 @@ __device__ inline  glm::vec2 ConcentricSampleDisk(float u1, float u2)
 		r = uOffset.y;
 		theta = CUDART_PIO2_F - CUDART_PIO4_F * (uOffset.x / uOffset.y);
 	}
-	return r * glm::vec2(glm::cos(theta), glm::sin(theta));
+	return r * glm::vec2(cosf(theta), sinf(theta));
 }
 
 __device__ inline  glm::vec3 CosineSampleHemisphere(float u1, float u2)
 {
 	glm::vec2 d = ConcentricSampleDisk(u1, u2);
-	float z = glm::sqrt(glm::max(0.f, 1.0f - d.x * d.x - d.y * d.y));
+	float z = sqrtf(fmaxf(0.f, 1.0f - d.x * d.x - d.y * d.y));
 	return glm::vec3(d.x, d.y, z);
 }
 
 __device__ inline  glm::vec3 UniformHemisphereSample(float u1, float u2)
 {
-	const float r = sqrt(1.0f - u1 * u1);
+	const float r = sqrtf(1.0f - u1 * u1);
 	const float phi = 2 * CUDART_PI_F * u2;
 
-	return glm::vec3(cos(phi) * r, sin(phi) * r, u1);
+	return glm::vec3(cosf(phi) * r, sinf(phi) * r, u1);
 }
 
 struct Intersect
@@ -280,16 +280,17 @@ struct BXDF
 	__device__ bool refract(const glm::vec3& wi, const glm::vec3& normal, float eta, glm::vec3& wo)
 	{
 		float cosThetaI = glm::dot(normal, wi);
-		float sin2ThetaI = glm::max(0.f, 1.f - cosThetaI * cosThetaI);
+		float sin2ThetaI = fmaxf(0.f, 1.f - cosThetaI * cosThetaI);
 		float sin2ThetaT = eta * eta * sin2ThetaI;
-		// Handle total internal reflection for transmission 
+		
 		if (sin2ThetaT >= 1.f)
 		{
+			// this means that the ray has reflected (TIR-ed)
 			wo = glm::reflect(-wi, normal);
 			return true;
 		}
 
-		float cosThetaT = glm::sqrt(1.f - sin2ThetaT);
+		float cosThetaT = sqrtf(1.f - sin2ThetaT);
 
 		wo = eta * -wi + (eta * cosThetaI - cosThetaT) * normal;
 		return true;
@@ -733,7 +734,7 @@ static void glfw_error_callback(int error, const char* description)
 	fputs(description, stderr);
 }
 
-struct pxl_interop
+struct cudaglInterop
 {
 	// split GPUs?
 	bool                    multi_gpu;
@@ -755,7 +756,7 @@ struct pxl_interop
 	cudaArray_t* ca;
 };
 
-cudaError_t pxl_interop_size_set(struct pxl_interop* const interop, const int width, const int height)
+cudaError_t cudaglInterop_size_set(struct cudaglInterop* const interop, const int width, const int height)
 {
 	cudaError_t cuda_err = cudaSuccess;
 
@@ -802,9 +803,9 @@ cudaError_t pxl_interop_size_set(struct pxl_interop* const interop, const int wi
 void pxl_glfw_window_size_callback(GLFWwindow* window, int width, int height)
 {
 	// get context
-	struct pxl_interop* const interop = (struct pxl_interop* const) glfwGetWindowUserPointer(window);
+	struct cudaglInterop* const interop = (struct cudaglInterop* const) glfwGetWindowUserPointer(window);
 
-	pxl_interop_size_set(interop, width, height);
+	cudaglInterop_size_set(interop, width, height);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -882,10 +883,10 @@ struct GLFWViewer
 		CreateInterop();
 	}
 	
-	struct pxl_interop*
-		pxl_interop_create(const bool multi_gpu, const int fbo_count)
+	struct cudaglInterop*
+		cudaglInterop_create(const bool multi_gpu, const int fbo_count)
 	{
-		struct pxl_interop* const interop = (struct pxl_interop* const)calloc(1, sizeof(*interop));
+		struct cudaglInterop* const interop = (struct cudaglInterop* const)calloc(1, sizeof(*interop));
 
 		interop->multi_gpu = multi_gpu;
 		interop->count = fbo_count;
@@ -922,7 +923,7 @@ struct GLFWViewer
 		// CREATE INTEROP
 		//
 		// TESTING -- DO NOT SET TO FALSE, ONLY TRUE IS RELIABLE
-		interop = pxl_interop_create(true /*multi_gpu*/, 2);
+		interop = cudaglInterop_create(true /*multi_gpu*/, 2);
 
 		//
 		// RESIZE INTEROP
@@ -934,7 +935,7 @@ struct GLFWViewer
 		glfwGetFramebufferSize(m_window, &width, &height);
 
 		// resize with initial window dimensions
-		cuda_err = pxl_interop_size_set(interop, width, height);
+		cuda_err = cudaglInterop_size_set(interop, width, height);
 
 		glfwSetWindowUserPointer(m_window, interop);
 		glfwSetFramebufferSizeCallback(m_window, pxl_glfw_window_size_callback);
@@ -956,7 +957,7 @@ struct GLFWViewer
 
 	cudaError_t cuda_err;
 
-	struct pxl_interop* interop;
+	struct cudaglInterop* interop;
 };
 
 // ------------------UTILITY FUNCTIONS------------------

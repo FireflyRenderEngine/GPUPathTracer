@@ -12,7 +12,7 @@ __device__ inline bool intersectPlane(const Geometry& plane, const Ray& ray, Int
 {
 	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
 	float denom = glm::dot(plane.m_normal, ray.m_direction);
-	if (glm::abs(denom) > RAY_EPSILON)
+	if (fabsf(denom) > RAY_EPSILON)
 	{
 		glm::vec3 p0l0 = -ray.m_origin;
 		float t = glm::dot(p0l0, plane.m_normal) / denom;
@@ -341,7 +341,7 @@ __global__ void launchPathTrace(
 					break;
 				}
 				float dotProd = glm::dot(incomingRay.m_direction, intersect.m_normal);
-				thruput *= glm::abs(dotProd) * (bxdf / pdf);
+				thruput *= fabsf(dotProd) * (bxdf / pdf);
 
 #ifdef NEE
 				if (!lastSpecular)
@@ -397,7 +397,7 @@ __global__ void launchPathTrace(
 				{
 					curandState state;
 					curand_init((unsigned long long)clock() + x, x, 0, &state);
-					float q = glm::max(.05f, 1.f - thruput[1]);
+					float q = fmaxf(.05f, 1.f - thruput[1]);
 					if (curand_uniform(&state) < q)
 						break;
 					thruput /= 1.f - q;
@@ -411,9 +411,8 @@ __global__ void launchPathTrace(
 		
 		samplesPerPixel++;
 	}
-	
-	pixelColorPerPixel /= static_cast<float>(totalSamplesPerPixel);
 
+	pixelColorPerPixel /= totalSamplesPerPixel;
 	finalPixelColor += pixelColorPerPixel;
 	
 	d_pixelColor[pixelIndex] = finalPixelColor;	
@@ -430,7 +429,8 @@ __global__ void launchPathTrace(
 		cudaBoundaryModeZero);
 }
 
-cudaError_t pxl_kernel_launcher(cudaArray_const_t array,
+cudaError_t launchPathTraceKernel(
+	cudaArray_const_t array,
 	const int         width,
 	const int         height,
 	cudaEvent_t       event,
@@ -644,7 +644,7 @@ int main()
 		{
 			timer.Start();
 
-			viewer->cuda_err = pxl_kernel_launcher(
+			viewer->cuda_err = launchPathTraceKernel(
 				viewer->interop->ca[viewer->interop->index],
 				windowWidth,
 				windowHeight,
