@@ -269,7 +269,7 @@ struct BXDF
 		{
 			return 1.f;
 		}
-		return {};
+		return 0.f;
 	}
 
 	__device__ glm::vec3 faceForward(const glm::vec3& n, const glm::vec3& v)
@@ -372,7 +372,21 @@ struct BXDF
 		}
 		else if (m_type == BXDFTyp::GLASS)
 		{
-			
+			int x = blockIdx.x * blockDim.x + threadIdx.x;
+			curandState state1;
+			curand_init((unsigned long long)clock() + x, x, 0, &state1);
+			float randomBXDF = curand_uniform(&state1);
+			if (randomBXDF < 0.07f)
+			{
+				// there's only 1 way for this outgoing ray to bend
+				incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+				bsdfPDF = pdf(outgoing, incoming);
+
+				isSpecular = true;
+				return m_transmittanceColor /** (FresnelConductorEvaluate)*/ / glm::abs(glm::dot(incoming, intersect.m_normal));
+			}
+
+
 			// there's only 1 way for this outgoing ray to bend
 			float airRefractiveIndex = 1.f;
 			float eta = glm::dot(intersect.m_normal, outgoing) > 0 ?  airRefractiveIndex / m_refractiveIndex  : m_refractiveIndex / airRefractiveIndex;
@@ -389,7 +403,7 @@ struct BXDF
 			bsdfPDF = -1.f;
 			return glm::vec3(0.f);
 		}
-		return {};
+		return glm::vec3(0.f);
 	}
 };
 
@@ -1049,6 +1063,47 @@ void saveToPPM(GLFWViewer* viewer)
 	}
 	renderFile.close();
 	delete[] pixels4;
+}
+
+void saveToPNG(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
+{
+	int width = viewer->interop->width;
+	int height = viewer->interop->height;
+	uchar4* pixels4 = new uchar4[width * height];
+
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+
+	stbi_flip_vertically_on_write(1);
+	
+	std::string pathname = "render_" + std::to_string(spp) + "spp_"+ std::to_string(maxDepth)+"_depth"+ std::to_string(iterations)+"_iter.png";
+
+	stbi_write_png(pathname.c_str(), width, height, 4, pixels4, width * 4);
+	
+}
+
+void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
+{
+	int width = viewer->interop->width;
+	int height = viewer->interop->height;
+	uchar4* pixels4 = new uchar4[width * height];
+
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+
+	stbi_flip_vertically_on_write(1);
+
+	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "_depth" + std::to_string(iterations) + "_iter.png";
+
+	float* hdrPixels = new float[4 * width * height];
+	for (int i = 0; i < width * height * 4; i += 4)
+	{
+		hdrPixels[i] = pixels4[i / 4].x / 255.f;
+		hdrPixels[i + 1] = pixels4[i / 4].y / 255.f;
+		hdrPixels[i + 2] = pixels4[i / 4].z / 255.f;
+		hdrPixels[i + 3] = pixels4[i / 4].w / 255.f;
+	}
+	stbi_write_hdr(pathname.c_str(), width, height, 4, hdrPixels);
+	delete[] hdrPixels;
+
 }
 
 void saveToIMAGE(GLFWViewer* viewer)

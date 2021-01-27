@@ -473,8 +473,9 @@ int main()
 
 	std::vector<Triangle> trianglesInMesh;
 	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
-	Geometry triangleMeshGeometry		("sphere",GeometryType::TRIANGLEMESH, glm::vec3(3.f, -3.f, 0.f), glm::vec3(20.0f, 45.0f, 0.0f), glm::vec3(1.5f), trianglesInMesh);
-	Geometry topPlaneLightGeometry		("ceiling light", GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(5.f));
+	Geometry sphereglassMeshGeometry	("sphere glass",GeometryType::TRIANGLEMESH, glm::vec3(3.5f, -5.5f, 1.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
+	Geometry spheremirrorMeshGeometry	("sphere mirror", GeometryType::TRIANGLEMESH, glm::vec3(-3.5f, -5.5f, -2.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
+	Geometry topPlaneLightGeometry		("ceiling light", GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(7.5f, 5.f, 5.f));
 	Geometry leftPlaneLightGeometry		("left light", GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
 	Geometry bottomPlaneWhiteGeometry	("floor", GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(-90.f, 0.f, 0.f), glm::vec3(15.f));
 	Geometry topPlaneWhiteGeometry		("ceiling", GeometryType::PLANE, glm::vec3(0.f, 7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
@@ -487,6 +488,10 @@ int main()
 	diffusebxdfREDMesh.m_type = BXDFTyp::DIFFUSE;
 	diffusebxdfREDMesh.m_albedo = { 1.f, 0.f, 0.f };
 
+	BXDF diffusebxdfLIGHTREDMesh;
+	diffusebxdfLIGHTREDMesh.m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfLIGHTREDMesh.m_albedo = { 0.725f, 0.431f, 0.451f };
+
 	BXDF diffusebxdfGREENMesh;
 	diffusebxdfGREENMesh.m_type = BXDFTyp::DIFFUSE;
 	diffusebxdfGREENMesh.m_albedo = { 0.f, 1.f, 0.f };
@@ -494,6 +499,10 @@ int main()
 	BXDF diffusebxdfBLUEMesh;
 	diffusebxdfBLUEMesh.m_type = BXDFTyp::DIFFUSE;
 	diffusebxdfBLUEMesh.m_albedo = { 0.f, 0.f, 1.f };
+
+	BXDF diffusebxdfLIGHTBLUEMesh;
+	diffusebxdfLIGHTBLUEMesh.m_type = BXDFTyp::DIFFUSE;
+	diffusebxdfLIGHTBLUEMesh.m_albedo = { 0.471f, 0.412f, 0.706f };
 
 	BXDF diffusebxdfPURPLEMesh;
 	diffusebxdfPURPLEMesh.m_type = BXDFTyp::DIFFUSE;
@@ -514,20 +523,22 @@ int main()
 
 	BXDF glassbxdfWHITEMesh;
 	glassbxdfWHITEMesh.m_type = BXDFTyp::GLASS;
-	glassbxdfWHITEMesh.m_refractiveIndex = 1.85f;
+	glassbxdfWHITEMesh.m_refractiveIndex = 1.5f;
 	glassbxdfWHITEMesh.m_transmittanceColor = { 1.f, 1.f, 1.f };
 
-	triangleMeshGeometry.m_bxdf		= &glassbxdfWHITEMesh;
+	sphereglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
+	spheremirrorMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
 	bottomPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
-	leftPlaneRedGeometry.m_bxdf		= &diffusebxdfREDMesh;
-	rightPlaneGreenGeometry.m_bxdf	= &diffusebxdfGREENMesh;
+	leftPlaneRedGeometry.m_bxdf		= &diffusebxdfLIGHTREDMesh;
+	rightPlaneGreenGeometry.m_bxdf	= &diffusebxdfLIGHTBLUEMesh;
 	topPlaneLightGeometry.m_bxdf	= &lightbxdfPlane;
 	leftPlaneLightGeometry.m_bxdf	= &lightbxdfPlane;
 	
 	std::vector<Geometry> geometries;
-	geometries.push_back(triangleMeshGeometry);
+	geometries.push_back(sphereglassMeshGeometry);
+	geometries.push_back(spheremirrorMeshGeometry);
 	geometries.push_back(topPlaneLightGeometry);
 	//geometries.push_back(leftPlaneLightGeometry);
 	geometries.push_back(bottomPlaneWhiteGeometry);
@@ -603,10 +614,10 @@ int main()
 	}
 
 	Camera camera;
-	camera.m_position = glm::vec3(0.f, 0.f, 16.5f);
+	camera.m_position = glm::vec3(0.f, 0.f, 29.2f);
 	camera.m_forward = glm::vec3(0.f, 0.f, -1.f);
 	camera.m_worldUp = glm::vec3(0.f, 1.f, 0.f);
-	camera.m_fov = 70.f;
+	camera.m_fov = 38.f;
 	camera.m_screenHeight = float(windowWidth);
 	camera.m_screenWidth = float(windowHeight);
 	camera.m_nearClip = 0.001f;
@@ -625,8 +636,8 @@ int main()
 
 	int iteration = 1;
 
-	int maxDepth = 4;
-	int samplesPerPixel = 4;
+	int maxDepth = 12;
+	int samplesPerPixel = 8;
 
 	GpuTimer timer;
 	float time = 0.f;
@@ -669,9 +680,10 @@ int main()
 		sprintf(title, "Firefly | FPS %f | iteration: %d | kernel took: %.2fs | samples per pixel: %d | max depth: %d", 1.0f/time, iteration, time, samplesPerPixel, maxDepth);
 		glfwSetWindowTitle(viewer->m_window, title);
 		
-		if (iteration == 256)
+		if (iteration == 1000)
 		{
-			//saveToIMAGE(viewer);
+			saveToHDR(viewer.get(), iteration, maxDepth, samplesPerPixel);
+			saveToPNG(viewer.get(), iteration, maxDepth, samplesPerPixel);
 		}
 
 		//
