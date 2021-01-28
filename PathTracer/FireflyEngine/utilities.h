@@ -183,6 +183,8 @@ struct Intersect
 	Intersect() = default;
 	glm::vec3 m_intersectionPoint;
 	glm::vec3 m_normal;
+	glm::vec3 m_tangent;
+	glm::vec3 m_bitangent;
 	float m_t{ 0.f };
 	int geometryIndex{ -1 };
 	int triangleIndex{ -1 };
@@ -272,6 +274,27 @@ struct BXDF
 		return 0.f;
 	}
 
+	__device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming, const Intersect& intersect)
+	{
+		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+		if (m_type == BXDFTyp::DIFFUSE)
+		{
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
+			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
+			// cosine weighted hemisphere sampling: cosTheta / PI
+			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceIncoming.z) * CUDART_2_OVER_PI_F * 0.5f : 0.f;
+
+			// uniform hemisphere sampling: 1 / 2*PI
+			//return CUDART_2_OVER_PI_F * 0.25f;
+		}
+		else if (m_type == BXDFTyp::MIRROR || m_type == BXDFTyp::GLASS)
+		{
+			return 1.f;
+		}
+		return 0.f;
+	}
+
 	__device__ glm::vec3 faceForward(const glm::vec3& n, const glm::vec3& v)
 	{
 		return (glm::dot(n, v) < 0.f) ? -n : n;
@@ -295,6 +318,16 @@ struct BXDF
 		return true;
 	}
 
+	__device__ glm::vec3 f(glm::vec3 worldSpaceOutgoing, glm::vec3 worldSpaceIncoming, glm::vec3 normal)
+	{
+		if (m_type == BXDFTyp::DIFFUSE)
+		{
+			// albedo / PI
+			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
+		}
+		return glm::vec3(0.f);
+	}
+
 	/**
 	 * @brief sampleBsdf samples the bsdf depending on which one it is and sends back the 
 	 *		  glm::vec3 scalar. Along with the randomly sampled bsdf direction and its 
@@ -307,7 +340,7 @@ struct BXDF
 	 * @param isSpecular (INPUT): if the currrent bsdf is specular (transmissive/reflective), we mark this true for NEE calculation
 	 * @return : glm::vec3 scalar value of the object's color information
 	*/
-	__device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, const Intersect& intersect, float& bsdfPDF, int depth, bool& isSpecular)
+	__device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, Intersect& intersect, float& bsdfPDF, int depth, bool& isSpecular)
 	{
 		//ASSUMPTION: incoming vector points away from the point of intersection
 
@@ -333,8 +366,6 @@ struct BXDF
 			sample[0] = curand_uniform(&state1);
 			sample[1] = curand_uniform(&state1);
 			// do warp from square to cosine weighted hemisphere
-			glm::vec3 tangent, bitangent;
-
 			// we calculate tangent and bitangent only here where we need it
 			// 2 matrix multiplications need to happen with a world space normal:
 			// transpose of the TBN (TangentBitangentNormal) matrix to calculate
@@ -343,8 +374,8 @@ struct BXDF
 			// This means that once we have a tangent space sampled direction (incoming),
 			// we need to convert this to world space
 
-			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
+			calculateCoordinateAxes(intersect.m_normal, intersect.m_tangent, intersect.m_bitangent);
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
 			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
 			//incoming = UniformHemisphereSample(sample[0], sample[1]);
 			incoming = CosineSampleHemisphere(sample[0], sample[1]);
@@ -355,7 +386,7 @@ struct BXDF
 			
 			bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
 			// convert tangent space bsdf sampled direction (incoming) to world space
-			incoming = glm::normalize(glm::mat3(tangent, bitangent, intersect.m_normal) * incoming);
+			incoming = glm::normalize(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * incoming);
 			isSpecular = false;
 			// albedo / PI
 			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
