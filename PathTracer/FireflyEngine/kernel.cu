@@ -190,7 +190,6 @@ __device__ inline  glm::vec3 getBXDF(const Ray& outgoingRay, const Intersect& in
  * @param camera (INPUT): contains all the forward, up, near/far clip to construct the ray direction
  * @param x (INPUT): horizontal thread index for a certain pixel
  * @param y (INPUT): vertical thread index for a certain pixel
- * @param iterations (INPUT): the current iteration. Used to generate a unique seed for the random number generator
  * @return: a Ray which contains the origin and the newly generated direction
 */
 __device__ inline  bool generateRay(Camera camera, int x, int y, Ray& ray)
@@ -267,12 +266,18 @@ __global__ void launchPathTrace(
 	// Loop over total number of samples to be shot per pixel (gives us anti aliasing)
 	//   A. Loop until we hit max depth or russian roulette termination
 	//		1. Check if we hit a light
-	//		  1.a if we hit light, then terminate
+	//		  1.a if we hit light, then terminate if the last material was not specular since we accumulate lights contribution during every non-specular bounce (NEE)
+	//			1.a.i if the last material was specular, then add emitter's contribution since specular materials cannot add NEE contribution. (This is because specular materials will bend the ray of light in only one possible direction)
 	//		2. Check what material we hit
 	//		  2.a get bsdf and pdf
 	//		  2.b get next ray (incoming)
 	//		  2.c calculate thruput and calculate russian roulette
-	//		  2.d Go bath to A
+	//		  2.d if the current hit material is not specular, we can calculate the next event estimation's (NEE) approximation. See here for more details: http://www.cs.uu.nl/docs/vakken/magr/portfolio/INFOMAGR/lecture8.pdf
+	//			2.d.i we sample a point on a randomly selected light (which we later average out)
+	//			2.d.ii we then calculate the cosine of the angles between this shadow ray (intersectionPointOnSurface, randomSampleOnLight - intersectionPointOnSurface) and the normal on the lights surface and the normal on the point of intersection
+	//			2.d.iii we then trace this shadow ray, and if there are no obstructions between the light and the point of intersection, we calculate the solid angle of the light on to the point of intersection on the object
+	//			2.d.iv We then add on the light's contribution on to the radiance being carried along the ray 
+	//		  2.d Go back to A
 
 	// This is where we will store the final radiance that will be converted to RGB
 	// to be stored and displayed by the render buffer
@@ -475,6 +480,9 @@ int main()
 	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
 	Geometry sphereglassMeshGeometry	("sphere glass",GeometryType::TRIANGLEMESH, glm::vec3(3.5f, -5.5f, 1.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
 	Geometry spheremirrorMeshGeometry	("sphere mirror", GeometryType::TRIANGLEMESH, glm::vec3(-3.5f, -5.5f, -2.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
+	std::vector<Triangle> trianglesInOtherMesh;
+	LoadMesh(R"(..\..\sceneResources\wahoo.obj)", trianglesInOtherMesh);
+	Geometry wahooglassMeshGeometry		("wahoo", GeometryType::TRIANGLEMESH, glm::vec3(0.f, -7.f, 0.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f), trianglesInOtherMesh);
 	Geometry topPlaneLightGeometry		("ceiling light", GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(7.5f, 5.f, 5.f));
 	Geometry leftPlaneLightGeometry		("left light", GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
 	Geometry bottomPlaneWhiteGeometry	("floor", GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(-90.f, 0.f, 0.f), glm::vec3(15.f));
@@ -519,15 +527,18 @@ int main()
 
 	BXDF mirrorbxdfWHITEMesh;
 	mirrorbxdfWHITEMesh.m_type = BXDFTyp::MIRROR;
+	mirrorbxdfWHITEMesh.m_refractiveIndex = 1.5f;
 	mirrorbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
 
 	BXDF glassbxdfWHITEMesh;
 	glassbxdfWHITEMesh.m_type = BXDFTyp::GLASS;
 	glassbxdfWHITEMesh.m_refractiveIndex = 1.5f;
+	glassbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
 	glassbxdfWHITEMesh.m_transmittanceColor = { 1.f, 1.f, 1.f };
 
 	sphereglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
 	spheremirrorMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
+	wahooglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
 	bottomPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
@@ -537,8 +548,9 @@ int main()
 	leftPlaneLightGeometry.m_bxdf	= &lightbxdfPlane;
 	
 	std::vector<Geometry> geometries;
-	geometries.push_back(sphereglassMeshGeometry);
-	geometries.push_back(spheremirrorMeshGeometry);
+	//geometries.push_back(sphereglassMeshGeometry);
+	//geometries.push_back(spheremirrorMeshGeometry);
+	geometries.push_back(wahooglassMeshGeometry);
 	geometries.push_back(topPlaneLightGeometry);
 	//geometries.push_back(leftPlaneLightGeometry);
 	geometries.push_back(bottomPlaneWhiteGeometry);
@@ -602,7 +614,6 @@ int main()
 
 		if (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH)
 		{
-			// TODO: Figure out a better way to allocate and deallocate this d_triangleDataTransfer
 			d_triangleDataTransfer = nullptr;
 			cudaMallocManaged((void**)&d_triangleDataTransfer, sizeof(Triangle) * geometries[i].m_numberOfTriangles);
 			cudaCheckErrors("cudaMalloc host triangle data fail");
@@ -636,8 +647,8 @@ int main()
 
 	int iteration = 1;
 
-	int maxDepth = 12;
-	int samplesPerPixel = 8;
+	int maxDepth = 6;
+	int samplesPerPixel = 4;
 
 	GpuTimer timer;
 	float time = 0.f;

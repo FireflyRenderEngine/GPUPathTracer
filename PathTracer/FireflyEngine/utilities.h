@@ -286,8 +286,7 @@ struct BXDF
 		if (sin2ThetaT >= 1.f)
 		{
 			// this means that the ray has reflected (TIR-ed)
-			wo = glm::reflect(-wi, normal);
-			return true;
+			return false;
 		}
 
 		float cosThetaT = sqrtf(1.f - sin2ThetaT);
@@ -368,41 +367,47 @@ struct BXDF
 			bsdfPDF = pdf(outgoing, incoming);
 
 			isSpecular = true;
-			return m_specularColor /** (FresnelConductorEvaluate)*/ / glm::abs(glm::dot(incoming, intersect.m_normal));
+			return m_specularColor / glm::abs(glm::dot(incoming, intersect.m_normal));
 		}
 		else if (m_type == BXDFTyp::GLASS)
 		{
-			int x = blockIdx.x * blockDim.x + threadIdx.x;
-			curandState state1;
-			curand_init((unsigned long long)clock() + x, x, 0, &state1);
-			float randomBXDF = curand_uniform(&state1);
-			if (randomBXDF < 0.07f)
-			{
-				// there's only 1 way for this outgoing ray to bend
-				incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
-				bsdfPDF = pdf(outgoing, incoming);
-
-				isSpecular = true;
-				return m_transmittanceColor /** (FresnelConductorEvaluate)*/ / glm::abs(glm::dot(incoming, intersect.m_normal));
-			}
-
-
 			// there's only 1 way for this outgoing ray to bend
 			float airRefractiveIndex = 1.f;
-			float eta = glm::dot(intersect.m_normal, outgoing) > 0 ?  airRefractiveIndex / m_refractiveIndex  : m_refractiveIndex / airRefractiveIndex;
+			bool entering = glm::dot(intersect.m_normal, outgoing) > 0;
+			float eta = entering ?  airRefractiveIndex / m_refractiveIndex  : m_refractiveIndex / airRefractiveIndex;
 			
+			if(entering)
+			{
+				int x = blockIdx.x * blockDim.x + threadIdx.x;
+				curandState state1;
+				curand_init((unsigned long long)clock() + x, x, 0, &state1);
+				float randomBXDF = curand_uniform(&state1);
+				if (randomBXDF < 0.07f)
+				{
+					// there's only 1 way for this outgoing ray to bend
+					incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+					bsdfPDF = pdf(outgoing, incoming);
+
+					isSpecular = true;
+					return m_specularColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+				}
+			}
+
 			isSpecular = true;
 			bool refracted = refract(outgoing, faceForward(intersect.m_normal, outgoing), eta, incoming);
 			if (refracted)
 			{
 				incoming = glm::normalize(incoming);
-				bsdfPDF = pdf(outgoing, incoming);
-				
-				return m_transmittanceColor/* * (FresnelConductorEvaluate)*/ / glm::abs(glm::dot(incoming, intersect.m_normal));
 			}
-			bsdfPDF = -1.f;
-			return glm::vec3(0.f);
+			else
+			{
+				incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+			}
+			bsdfPDF = pdf(outgoing, incoming);
+			
+			return m_transmittanceColor / glm::abs(glm::dot(incoming, intersect.m_normal));
 		}
+		bsdfPDF = -1.f;
 		return glm::vec3(0.f);
 	}
 };
@@ -747,7 +752,8 @@ static void glfw_error_callback(int error, const char* description)
 {
 	fputs(description, stderr);
 }
-
+// Allan MacKinnon's: A tiny example of CUDA + OpenGL interop with write-only surfaces and CUDA kernels.
+// https://gist.github.com/allanmac/4ff11985c3562830989f
 struct cudaglInterop
 {
 	// split GPUs?
@@ -1075,7 +1081,7 @@ void saveToPNG(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
 
 	stbi_flip_vertically_on_write(1);
 	
-	std::string pathname = "render_" + std::to_string(spp) + "spp_"+ std::to_string(maxDepth)+"_depth"+ std::to_string(iterations)+"_iter.png";
+	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter.png";
 
 	stbi_write_png(pathname.c_str(), width, height, 4, pixels4, width * 4);
 	
@@ -1091,7 +1097,7 @@ void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
 
 	stbi_flip_vertically_on_write(1);
 
-	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "_depth" + std::to_string(iterations) + "_iter.png";
+	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter.png";
 
 	float* hdrPixels = new float[4 * width * height];
 	for (int i = 0; i < width * height * 4; i += 4)
