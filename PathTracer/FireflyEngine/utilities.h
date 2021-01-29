@@ -1128,7 +1128,7 @@ void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
 
 	stbi_flip_vertically_on_write(1);
 
-	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter.png";
+	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter.hdr";
 
 	float* hdrPixels = new float[4 * width * height];
 	for (int i = 0; i < width * height * 4; i += 4)
