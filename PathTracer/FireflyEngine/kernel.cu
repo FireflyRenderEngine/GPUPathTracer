@@ -345,8 +345,7 @@ __global__ void launchPathTrace(
 				{
 					break;
 				}
-				float dotProd = glm::dot(incomingRay.m_direction, intersect.m_normal);
-				thruput *= fabsf(dotProd) * (bxdf / pdf);
+				thruput *= bxdf;
 
 #ifdef NEE
 				if (!lastSpecular)
@@ -382,9 +381,9 @@ __global__ void launchPathTrace(
 							if (randomLightIntersect.geometryIndex == lights[lightIdx] && geometries[randomLightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 							{
 								float cosP = glm::dot(-shadowRayDirection, randomLightIntersect.m_normal);
-
+								glm::vec3 bxdfSample = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRayDirection, intersect);
 								glm::vec3 lightBxdf = cosP > 0.f ? geometries[randomLightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[randomLightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
-								glm::vec3 directLighting = static_cast<float>(numberOfLights) * lightBxdf * cosT * cosP * geometries[randomLightIntersect.geometryIndex].m_surfaceArea / lengthSquared;
+								glm::vec3 directLighting = static_cast<float>(numberOfLights) *  lightBxdf * bxdfSample *cosP* geometries[randomLightIntersect.geometryIndex].m_surfaceArea / lengthSquared;
 								pixelColorPerSample += directLighting * thruput;
 							}
 						}
@@ -402,7 +401,7 @@ __global__ void launchPathTrace(
 				{
 					curandState state;
 					curand_init((unsigned long long)clock() + x, x, 0, &state);
-					float q = fmaxf(.05f, 1.f - thruput[1]);
+					float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
 					if (curand_uniform(&state) < q)
 						break;
 					thruput /= 1.f - q;
@@ -522,7 +521,7 @@ int main()
 
 	BXDF lightbxdfPlane;
 	lightbxdfPlane.m_type = BXDFTyp::EMITTER;
-	lightbxdfPlane.m_intensity = 3.0f;
+	lightbxdfPlane.m_intensity = 1.0f;
 	lightbxdfPlane.m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	BXDF mirrorbxdfWHITEMesh;
@@ -548,9 +547,9 @@ int main()
 	leftPlaneLightGeometry.m_bxdf	= &lightbxdfPlane;
 	
 	std::vector<Geometry> geometries;
-	//geometries.push_back(sphereglassMeshGeometry);
-	//geometries.push_back(spheremirrorMeshGeometry);
-	geometries.push_back(wahooglassMeshGeometry);
+	geometries.push_back(sphereglassMeshGeometry);
+	geometries.push_back(spheremirrorMeshGeometry);
+	//geometries.push_back(wahooglassMeshGeometry);
 	geometries.push_back(topPlaneLightGeometry);
 	//geometries.push_back(leftPlaneLightGeometry);
 	geometries.push_back(bottomPlaneWhiteGeometry);

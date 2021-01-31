@@ -295,6 +295,33 @@ struct BXDF
 		return true;
 	}
 
+	__device__ glm::vec3 f(const glm::vec3& worldSpaceOutgoing, const glm::vec3& worldSpaceIncoming, const Intersect& intersect)
+	{
+		if (m_type == BXDFTyp::DIFFUSE)
+		{
+			glm::vec3 tangent, bitangent;
+
+			// we calculate tangent and bitangent only here where we need it
+			// 2 matrix multiplications need to happen with a world space normal:
+			// transpose of the TBN (TangentBitangentNormal) matrix to calculate
+			// the tangent space outgoing direction. So when we sample the bsdf, 
+			// technically we sample the lobe in tangent space.
+			// This means that once we have a tangent space sampled direction (incoming),
+			// we need to convert this to world space
+
+			calculateCoordinateAxes(intersect.m_normal, tangent, bitangent);
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(tangent, bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceOutgoing = worldToLocal * worldSpaceOutgoing;
+			glm::vec3 tangentSpaceIncoming = worldToLocal * worldSpaceIncoming;
+
+			return (tangentSpaceOutgoing.z > 0.f) ? m_albedo * CUDART_2_OVER_PI_F * 0.5f *fabsf(tangentSpaceIncoming.z) : glm::vec3(0.f);
+		}
+		else
+		{
+			return glm::vec3(0.f);
+		}
+	}
+
 	/**
 	 * @brief sampleBsdf samples the bsdf depending on which one it is and sends back the 
 	 *		  glm::vec3 scalar. Along with the randomly sampled bsdf direction and its 
@@ -358,7 +385,7 @@ struct BXDF
 			incoming = glm::normalize(glm::mat3(tangent, bitangent, intersect.m_normal) * incoming);
 			isSpecular = false;
 			// albedo / PI
-			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
+			return m_albedo;
 		}
 		else if (m_type == BXDFTyp::MIRROR)
 		{
@@ -367,7 +394,7 @@ struct BXDF
 			bsdfPDF = pdf(outgoing, incoming);
 
 			isSpecular = true;
-			return m_specularColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+			return m_specularColor;
 		}
 		else if (m_type == BXDFTyp::GLASS)
 		{
@@ -389,7 +416,7 @@ struct BXDF
 					bsdfPDF = pdf(outgoing, incoming);
 
 					isSpecular = true;
-					return m_specularColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+					return m_specularColor;
 				}
 			}
 
@@ -405,7 +432,7 @@ struct BXDF
 			}
 			bsdfPDF = pdf(outgoing, incoming);
 			
-			return m_transmittanceColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+			return m_transmittanceColor;
 		}
 		bsdfPDF = -1.f;
 		return glm::vec3(0.f);
