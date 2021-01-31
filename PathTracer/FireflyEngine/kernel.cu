@@ -249,7 +249,7 @@ __global__ void launchPathTrace(
 {
 #ifdef PIXEL_DEBUG
 	int x = 400;
-	int y = 400;
+	int y = 685;
 
 #else
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -325,29 +325,19 @@ __global__ void launchPathTrace(
 				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
 				
 				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-				{
-#define MIS
-#ifdef MIS
-					if (depth > 0 && !lastSpecular)
-					{
-						break;
-					}
+				{					
 					// add to thruput and exit since we hit an emitter
-					pixelColorPerSample += thruput * bxdf;
+					if(depth == 0 || lastSpecular)
+						pixelColorPerSample += thruput * bxdf;
 					break;
-#else
-					pixelColorPerSample += thruput * bxdf;
-					break;
-#endif
 				}
 
 				if (pdf <= RAY_EPSILON)
 				{
 					break;
 				}
-				float dotProd = glm::dot(incomingRay.m_direction, intersect.m_normal);
-				thruput *= fabsf(dotProd) * (bxdf / pdf);
-
+				thruput *= (bxdf);
+#define MIS
 #ifdef MIS
 				if (!lastSpecular)
 				{
@@ -382,7 +372,7 @@ __global__ void launchPathTrace(
 						if (randomLightIntersect.geometryIndex == lights[lightIdx] && geometries[randomLightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
 						{
 							lightPdf = lengthSquared / (fabsf(glm::dot(-shadowRayDirection, randomLightIntersect.m_normal)) * geometries[randomLightIntersect.geometryIndex].m_surfaceArea);
-							glm::vec3 f = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRay.m_direction, intersect.m_normal) * fabsf(glm::dot(shadowRay.m_direction, intersect.m_normal));
+							glm::vec3 f = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRay.m_direction, intersect.m_normal);
 							scatteringPdf = geometries[intersect.geometryIndex].m_bxdf->pdf(-outgoingRay.m_direction, shadowRay.m_direction, intersect);
 
 							float cosP = glm::dot(-shadowRayDirection, randomLightIntersect.m_normal);
@@ -390,8 +380,8 @@ __global__ void launchPathTrace(
 							if(!isBlack(lightBxdf))
 							{
 								float weight = (lightPdf * lightPdf) / (lightPdf * lightPdf + scatteringPdf * scatteringPdf);
-								print("light weight", weight);
-								Ld += f * lightBxdf * weight / lightPdf;
+								//print("light weight", weight);
+								pixelColorPerSample += f * lightBxdf * weight * thruput;/// lightPdf;
 							}
 							
 						}
@@ -401,14 +391,16 @@ __global__ void launchPathTrace(
 					glm::vec3 f;
 					glm::vec3 bsdfSampleDirection;
 
+					
+
 					f = geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), bsdfSampleDirection, intersect, scatteringPdf, depth, lastSpecular);
-					f *= fabsf(glm::dot(bsdfSampleDirection, intersect.m_normal));
+					//f *= fabsf(glm::dot(bsdfSampleDirection, intersect.m_normal));
 
 					if (!isBlack(f) && scatteringPdf > 0.f)
 					{
 						float weight = 1;
 						Intersect lightIsect;
-						Ray bsdfMISRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, bsdfSampleDirection);
+						Ray bsdfMISRay(glm::dot(bsdfSampleDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, bsdfSampleDirection);
 						
 						bool foundSurfaceInteraction = intersectRays(bsdfMISRay, geometries, numberOfGeometries, lightIsect);
 						if (foundSurfaceInteraction && lightIsect.geometryIndex == lights[lightIdx] && geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
@@ -419,20 +411,20 @@ __global__ void launchPathTrace(
 							if (lightPdf >= 0.f)
 							{
 								weight = (scatteringPdf * scatteringPdf) / (lightPdf * lightPdf + scatteringPdf * scatteringPdf);
-								print("bsdf weight", weight);
+								//print("bsdf weight", weight);
 								glm::vec3 Li(0.f);
 								
 								float cosP = glm::dot(-bsdfMISRay.m_direction, lightIsect.m_normal);
 								Li = cosP > 0.f ? geometries[lightIsect.geometryIndex].m_bxdf->m_emissiveColor * geometries[lightIsect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
 								if (!isBlack(Li))
 								{
-										Ld += f * Li * weight / scatteringPdf;
+									pixelColorPerSample += f * Li * thruput * weight;// / scatteringPdf;
 								}
 							}
 						}
 					}
-					print("direct light", Ld);
-					pixelColorPerSample += static_cast<float>(numberOfLights) * Ld * thruput;
+					//print("direct light", Ld);
+					//pixelColorPerSample += static_cast<float>(numberOfLights) * Ld;
 				}
 #endif
 				// set the next ray for tracing
@@ -446,10 +438,14 @@ __global__ void launchPathTrace(
 				{
 					curandState state;
 					curand_init((unsigned long long)clock() + x, x, 0, &state);
-					float q = fmaxf(.05f, 1.f - thruput[1]);
-					if (curand_uniform(&state) < q)
+
+					float q = fminf(.95f, fminf(thruput[0], fminf(thruput[1], thruput[2])));
+					
+					float rand = curand_uniform(&state);
+
+					if (rand < q)
 						break;
-					thruput /= 1.f - q;
+					thruput *= q;
 				}
 #endif
 			}
@@ -464,7 +460,7 @@ __global__ void launchPathTrace(
 	pixelColorPerPixel /= totalSamplesPerPixel;
 	finalPixelColor += pixelColorPerPixel;
 	
-	d_pixelColor[pixelIndex] = finalPixelColor;	
+	d_pixelColor[pixelIndex] = finalPixelColor;
 	finalPixelColor /= iteration;
 
 	// clamp the final rgb color [0, 1]
@@ -566,7 +562,7 @@ int main()
 
 	BXDF lightbxdfPlane;
 	lightbxdfPlane.m_type = BXDFTyp::EMITTER;
-	lightbxdfPlane.m_intensity = 1.5f;
+	lightbxdfPlane.m_intensity = 1.30f;
 	lightbxdfPlane.m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	BXDF mirrorbxdfWHITEMesh;
@@ -580,8 +576,8 @@ int main()
 	glassbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
 	glassbxdfWHITEMesh.m_transmittanceColor = { 1.f, 1.f, 1.f };
 
-	sphereglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
-	spheremirrorMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
+	sphereglassMeshGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
+	spheremirrorMeshGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
 	wahooglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
 	bottomPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;

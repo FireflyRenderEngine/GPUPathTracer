@@ -323,7 +323,7 @@ struct BXDF
 		if (m_type == BXDFTyp::DIFFUSE)
 		{
 			// albedo / PI
-			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
+			return m_albedo * CUDART_2_OVER_PI_F * 0.5f * fabsf(worldSpaceIncoming.z);
 		}
 		return glm::vec3(0.f);
 	}
@@ -389,7 +389,7 @@ struct BXDF
 			incoming = glm::normalize(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * incoming);
 			isSpecular = false;
 			// albedo / PI
-			return m_albedo * CUDART_2_OVER_PI_F * 0.5f;
+			return m_albedo /** CUDART_2_OVER_PI_F * 0.5f*/;
 		}
 		else if (m_type == BXDFTyp::MIRROR)
 		{
@@ -398,7 +398,7 @@ struct BXDF
 			bsdfPDF = pdf(outgoing, incoming);
 
 			isSpecular = true;
-			return m_specularColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+			return m_specularColor /*/ glm::abs(glm::dot(incoming, intersect.m_normal))*/;
 		}
 		else if (m_type == BXDFTyp::GLASS)
 		{
@@ -412,15 +412,15 @@ struct BXDF
 				int x = blockIdx.x * blockDim.x + threadIdx.x;
 				curandState state1;
 				curand_init((unsigned long long)clock() + x, x, 0, &state1);
-				float randomBXDF = curand_uniform(&state1);
-				if (randomBXDF < 0.07f)
+				int randomBXDF = curand_uniform(&state1) * 2;
+				if (randomBXDF == 0)
 				{
 					// there's only 1 way for this outgoing ray to bend
 					incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
 					bsdfPDF = pdf(outgoing, incoming);
 
 					isSpecular = true;
-					return m_specularColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+					return m_specularColor /*/ glm::abs(glm::dot(incoming, intersect.m_normal))*/;
 				}
 			}
 
@@ -436,7 +436,7 @@ struct BXDF
 			}
 			bsdfPDF = pdf(outgoing, incoming);
 			
-			return m_transmittanceColor / glm::abs(glm::dot(incoming, intersect.m_normal));
+			return m_transmittanceColor /*/ glm::abs(glm::dot(incoming, intersect.m_normal))*/;
 		}
 		bsdfPDF = -1.f;
 		return glm::vec3(0.f);
