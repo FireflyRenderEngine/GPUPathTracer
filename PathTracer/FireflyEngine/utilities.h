@@ -181,6 +181,17 @@ __device__ inline  glm::vec3 UniformHemisphereSample(float u1, float u2)
 struct Intersect
 {
 	Intersect() = default;
+	__device__ void operator=(const Intersect& rhs)
+	{
+		m_intersectionPoint = rhs.m_intersectionPoint;
+		m_normal = rhs.m_normal;
+		m_tangent = rhs.m_tangent;
+		m_bitangent = rhs.m_bitangent;
+		m_t = rhs.m_t;
+		geometryIndex = rhs.geometryIndex;
+		triangleIndex = rhs.triangleIndex;
+	}
+
 	glm::vec3 m_intersectionPoint;
 	glm::vec3 m_normal;
 	glm::vec3 m_tangent;
@@ -267,9 +278,13 @@ struct BXDF
 			// uniform hemisphere sampling: 1 / 2*PI
 			//return CUDART_2_OVER_PI_F * 0.25f;
 		}
-		else if (m_type == BXDFTyp::MIRROR || m_type == BXDFTyp::GLASS)
+		else if (m_type == BXDFTyp::MIRROR )
 		{
 			return 1.f;
+		}
+		else if (m_type == BXDFTyp::GLASS)
+		{
+			return 0.5f;
 		}
 		return 0.f;
 	}
@@ -318,12 +333,15 @@ struct BXDF
 		return true;
 	}
 
-	__device__ glm::vec3 f(glm::vec3 worldSpaceOutgoing, glm::vec3 worldSpaceIncoming, glm::vec3 normal)
+	__device__ glm::vec3 f(glm::vec3 worldSpaceOutgoing, glm::vec3 worldSpaceIncoming, const Intersect& intersect)
 	{
 		if (m_type == BXDFTyp::DIFFUSE)
 		{
-			// albedo / PI
-			return m_albedo * CUDART_2_OVER_PI_F * 0.5f * fabsf(worldSpaceIncoming.z);
+			// albedo * cosI / PI
+			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+			glm::vec3 tangentSpaceIncoming = worldToLocal * worldSpaceIncoming;
+			glm::vec3 tangentSpaceOutgoing = worldToLocal * worldSpaceOutgoing;
+			return (tangentSpaceOutgoing.z > 0.f) ? m_albedo * CUDART_2_OVER_PI_F * 0.5f * fabsf(tangentSpaceIncoming.z) : glm::vec3(0.f);
 		}
 		return glm::vec3(0.f);
 	}
@@ -389,7 +407,7 @@ struct BXDF
 			incoming = glm::normalize(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * incoming);
 			isSpecular = false;
 			// albedo / PI
-			return m_albedo /** CUDART_2_OVER_PI_F * 0.5f*/;
+			return bsdfPDF > 0.f ? m_albedo : glm::vec3(0.f)/** CUDART_2_OVER_PI_F * 0.5f*/;
 		}
 		else if (m_type == BXDFTyp::MIRROR)
 		{
@@ -398,7 +416,7 @@ struct BXDF
 			bsdfPDF = pdf(outgoing, incoming);
 
 			isSpecular = true;
-			return m_specularColor /*/ glm::abs(glm::dot(incoming, intersect.m_normal))*/;
+			return m_specularColor;
 		}
 		else if (m_type == BXDFTyp::GLASS)
 		{
@@ -412,15 +430,16 @@ struct BXDF
 				int x = blockIdx.x * blockDim.x + threadIdx.x;
 				curandState state1;
 				curand_init((unsigned long long)clock() + x, x, 0, &state1);
-				int randomBXDF = curand_uniform(&state1) * 2;
-				if (randomBXDF == 0)
+				float randomBXDF = curand_uniform(&state1);
+		
+				if (randomBXDF < 0.5f)
 				{
 					// there's only 1 way for this outgoing ray to bend
 					incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
 					bsdfPDF = pdf(outgoing, incoming);
 
 					isSpecular = true;
-					return m_specularColor /*/ glm::abs(glm::dot(incoming, intersect.m_normal))*/;
+					return m_specularColor;
 				}
 			}
 
@@ -436,7 +455,7 @@ struct BXDF
 			}
 			bsdfPDF = pdf(outgoing, incoming);
 			
-			return m_transmittanceColor /*/ glm::abs(glm::dot(incoming, intersect.m_normal))*/;
+			return m_transmittanceColor/(eta*eta);
 		}
 		bsdfPDF = -1.f;
 		return glm::vec3(0.f);
@@ -1102,7 +1121,7 @@ void saveToPPM(GLFWViewer* viewer)
 	delete[] pixels4;
 }
 
-void saveToPNG(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
+void saveToPNG(GLFWViewer* viewer, int iterations, int maxDepth, int spp, std::string algoString)
 {
 	int width = viewer->interop->width;
 	int height = viewer->interop->height;
@@ -1112,13 +1131,13 @@ void saveToPNG(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
 
 	stbi_flip_vertically_on_write(1);
 	
-	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter.png";
+	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter_"+algoString+".png";
 
 	stbi_write_png(pathname.c_str(), width, height, 4, pixels4, width * 4);
 	
 }
 
-void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
+void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp, std::string algoString)
 {
 	int width = viewer->interop->width;
 	int height = viewer->interop->height;
@@ -1128,7 +1147,7 @@ void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp)
 
 	stbi_flip_vertically_on_write(1);
 
-	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter.hdr";
+	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter_" + algoString + ".hdr";
 
 	float* hdrPixels = new float[4 * width * height];
 	for (int i = 0; i < width * height * 4; i += 4)
