@@ -297,8 +297,8 @@ __global__ void launchPathTrace(
 
 	int samplesPerPixel = 1;
 	glm::vec3 pixelColorPerPixel(0.f);
-//#define MIS
-#define NEE
+#define MIS
+//#define NEE
 #ifdef MIS
 	while(samplesPerPixel <= totalSamplesPerPixel)
 	{
@@ -891,8 +891,8 @@ int main()
 		
 		if (iteration == 1000 || iteration == 100 || iteration == 10)
 		{
-			saveToHDR(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
-			saveToPNG(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
+			//saveToHDR(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
+			//saveToPNG(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
 		}
 
 		//

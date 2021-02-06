@@ -315,7 +315,7 @@ struct BXDF
 		return (glm::dot(n, v) < 0.f) ? -n : n;
 	}
 
-	__device__ bool refract(const glm::vec3& wi, const glm::vec3& normal, float eta, glm::vec3& wo)
+	__device__ glm::vec3 refract(const glm::vec3& wi, const glm::vec3& normal, float eta)
 	{
 		float cosThetaI = glm::dot(normal, wi);
 		float sin2ThetaI = fmaxf(0.f, 1.f - cosThetaI * cosThetaI);
@@ -324,13 +324,12 @@ struct BXDF
 		if (sin2ThetaT >= 1.f)
 		{
 			// this means that the ray has reflected (TIR-ed)
-			return false;
+			return glm::normalize(glm::reflect(-wi, normal));
 		}
 
 		float cosThetaT = sqrtf(1.f - sin2ThetaT);
 
-		wo = eta * -wi + (eta * cosThetaI - cosThetaT) * normal;
-		return true;
+		return(eta * -wi + (eta * cosThetaI - cosThetaT) * normal);
 	}
 
 	__device__ glm::vec3 f(glm::vec3 worldSpaceOutgoing, glm::vec3 worldSpaceIncoming, const Intersect& intersect)
@@ -344,6 +343,37 @@ struct BXDF
 			return (tangentSpaceOutgoing.z > 0.f) ? m_albedo * CUDART_2_OVER_PI_F * 0.5f * fabsf(tangentSpaceIncoming.z) : glm::vec3(0.f);
 		}
 		return glm::vec3(0.f);
+	}
+
+	__device__ float4 fresnel(float cosThetaI, float etaI, float etaT)
+	{
+		cosThetaI = glm::clamp(cosThetaI, -1.f, 1.f);
+		// Potentially swap indices of refraction 
+		bool entering = cosThetaI > 0.f;
+		float eta = etaI / etaT;
+		if (!entering)
+		{
+			float temp = etaI;
+			etaI = etaT;
+			etaT = temp;
+			cosThetaI = fabsf(cosThetaI);
+		}
+
+		// Compute cosThetaT using Snell’s law 
+		float sinThetaI = std::sqrt(fmaxf(0.f, 1.f - cosThetaI * cosThetaI));
+		float sinThetaT = etaI / etaT * sinThetaI;
+		// Handle total internal reflection 
+		//if (sinThetaT >= 1.f)
+		//	return 1.f;
+		float cosThetaT = std::sqrt(fmaxf(0.f, 1.f - sinThetaT * sinThetaT));
+
+		float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) / ((etaT * cosThetaI) + (etaI * cosThetaT));
+		float Rperp = ((etaI * cosThetaI) - (etaT * cosThetaT)) / ((etaI * cosThetaI) + (etaT * cosThetaT));
+		float reflCoefficient = (Rparl * Rparl + Rperp * Rperp) / 2.f;
+
+		float cosThetaT_WithSign = entering ? -cosThetaT : cosThetaT;
+
+		return make_float4(reflCoefficient, cosThetaT_WithSign, entering ? eta : 1/eta, entering ? 1/eta : eta);
 	}
 
 	/**
@@ -425,37 +455,24 @@ struct BXDF
 			bool entering = glm::dot(intersect.m_normal, outgoing) > 0;
 			float eta = entering ?  airRefractiveIndex / m_refractiveIndex  : m_refractiveIndex / airRefractiveIndex;
 			
-			if(entering)
-			{
-				int x = blockIdx.x * blockDim.x + threadIdx.x;
-				curandState state1;
-				curand_init((unsigned long long)clock() + x, x, 0, &state1);
-				float randomBXDF = curand_uniform(&state1);
-		
-				if (randomBXDF < 0.5f)
-				{
-					// there's only 1 way for this outgoing ray to bend
-					incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
-					bsdfPDF = pdf(outgoing, incoming);
+			// mitsuba's implementation
+			float4 fresnelCoeff = fresnel(glm::dot(intersect.m_normal, outgoing), airRefractiveIndex, m_refractiveIndex);
 
-					isSpecular = true;
-					return m_specularColor;
-				}
-			}
+			float fresnelTransmissionCoeff = 1.f - fresnelCoeff.x;
+			int x = blockIdx.x * blockDim.x + threadIdx.x;
+			curandState state1;
+			curand_init((unsigned long long)clock() + x, x, 0, &state1);
+			float sample1 = curand_uniform(&state1);
+			bool reflection = sample1 <= fresnelCoeff.x;
+
+			bsdfPDF = reflection ? fresnelCoeff.x : fresnelTransmissionCoeff;
+			bool transmission = !reflection;
+			
+			incoming = transmission ? refract(outgoing, faceForward(intersect.m_normal, outgoing), eta) : glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
 
 			isSpecular = true;
-			bool refracted = refract(outgoing, faceForward(intersect.m_normal, outgoing), eta, incoming);
-			if (refracted)
-			{
-				incoming = glm::normalize(incoming);
-			}
-			else
-			{
-				incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
-			}
-			bsdfPDF = pdf(outgoing, incoming);
 			
-			return m_transmittanceColor/(eta*eta);
+			return (transmission ? fresnelTransmissionCoeff * fresnelTransmissionCoeff * m_transmittanceColor : fresnelCoeff.x * m_specularColor) / bsdfPDF;
 		}
 		bsdfPDF = -1.f;
 		return glm::vec3(0.f);
