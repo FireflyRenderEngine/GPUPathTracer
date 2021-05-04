@@ -37,39 +37,39 @@
 
 struct GpuTimer
 {
-	cudaEvent_t start;
-	cudaEvent_t stop;
+    cudaEvent_t start;
+    cudaEvent_t stop;
 
-	GpuTimer()
-	{
-		cudaEventCreate(&start);
-		cudaEventCreate(&stop);
-	}
+    GpuTimer()
+    {
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+    }
 
-	~GpuTimer()
-	{
-		cudaEventDestroy(start);
-		cudaEventDestroy(stop);
-	}
+    ~GpuTimer()
+    {
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+    }
 
-	void Start()
-	{
-		cudaEventRecord(start, 0);
-	}
+    void Start()
+    {
+        cudaEventRecord(start, 0);
+    }
 
-	void Stop()
-	{
-		cudaEventRecord(stop, 0);
-	}
+    void Stop()
+    {
+        cudaEventRecord(stop, 0);
+    }
 
-	float Elapsed()
-	{
-		float elapsed;
-		cudaEventSynchronize(stop);
-		cudaEventElapsedTime(&elapsed, start, stop);
-		// returns the time elapsed in seconds
-		return elapsed / 1000.f;
-	}
+    float Elapsed()
+    {
+        float elapsed;
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed, start, stop);
+        // returns the time elapsed in seconds
+        return elapsed / 1000.f;
+    }
 };
 
 // Error Reporting
@@ -88,49 +88,49 @@ struct GpuTimer
 __device__ inline void print(const char* label, float value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %f\n", label, value);
+    printf("%s: %f\n", label, value);
 #endif
 }
 
 __device__ inline void print(const char* label, const char* value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %s\n", label, value);
+    printf("%s: %s\n", label, value);
 #endif
 }
 
 __device__ inline  void print(const char* label, int value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %d\n", label, value);
+    printf("%s: %d\n", label, value);
 #endif
 }
 
 __device__ inline  void print(const char* label, size_t value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %d\n", label, value);
+    printf("%s: %d\n", label, value);
 #endif
 }
 
 __device__ inline  void print(const char* label, unsigned int value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %d\n", label, value);
+    printf("%s: %d\n", label, value);
 #endif
 }
 
 __device__ inline  void print(const char* label, glm::vec3 value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
+    printf("%s: %f, %f, %f\n", label, value[0], value[1], value[2]);
 #endif
 }
 
 __device__ inline  void print(const char* label, uchar4 value)
 {
 #ifdef PIXEL_DEBUG
-	printf("%s: %d, %d, %d, %d\n", label, value.x, value.y, value.z, value.w);
+    printf("%s: %d, %d, %d, %d\n", label, value.x, value.y, value.z, value.w);
 #endif
 }
 
@@ -138,76 +138,76 @@ __device__ inline  void print(const char* label, uchar4 value)
 
 __device__ inline  bool isBlack(glm::vec3 color)
 {
-	return color.x <= RAY_EPSILON && color.y <= RAY_EPSILON && color.z <= RAY_EPSILON;
+    return color.x <= RAY_EPSILON && color.y <= RAY_EPSILON && color.z <= RAY_EPSILON;
 }
 
 __device__ inline  glm::vec2 ConcentricSampleDisk(float u1, float u2)
 {
-	glm::vec2 uOffset = 2.0f * glm::vec2(u1, u2) - glm::vec2(1.0f);
-	if (uOffset.x == 0.0f && uOffset.y == 0.0f) 
-	{
-		return glm::vec2(0.0f);
-	}
+    glm::vec2 uOffset = 2.0f * glm::vec2(u1, u2) - glm::vec2(1.0f);
+    if (uOffset.x == 0.0f && uOffset.y == 0.0f)
+    {
+        return glm::vec2(0.0f);
+    }
 
-	float theta, r;
-	if (fabsf(uOffset.x) > fabsf(uOffset.y))
-	{
-		r = uOffset.x;
-		theta = CUDART_PIO4_F * (uOffset.y / uOffset.x);
-	}
-	else 
-	{
-		r = uOffset.y;
-		theta = CUDART_PIO2_F - CUDART_PIO4_F * (uOffset.x / uOffset.y);
-	}
-	return r * glm::vec2(cosf(theta), sinf(theta));
+    float theta, r;
+    if (fabsf(uOffset.x) > fabsf(uOffset.y))
+    {
+        r = uOffset.x;
+        theta = CUDART_PIO4_F * (uOffset.y / uOffset.x);
+    }
+    else
+    {
+        r = uOffset.y;
+        theta = CUDART_PIO2_F - CUDART_PIO4_F * (uOffset.x / uOffset.y);
+    }
+    return r * glm::vec2(cosf(theta), sinf(theta));
 }
 
 __device__ inline  glm::vec3 CosineSampleHemisphere(float u1, float u2)
 {
-	glm::vec2 d = ConcentricSampleDisk(u1, u2);
-	float z = sqrtf(fmaxf(0.f, 1.0f - d.x * d.x - d.y * d.y));
-	return glm::vec3(d.x, d.y, z);
+    glm::vec2 d = ConcentricSampleDisk(u1, u2);
+    float z = sqrtf(fmaxf(0.f, 1.0f - d.x * d.x - d.y * d.y));
+    return glm::vec3(d.x, d.y, z);
 }
 
 __device__ inline  glm::vec3 UniformHemisphereSample(float u1, float u2)
 {
-	const float r = sqrtf(1.0f - u1 * u1);
-	const float phi = 2 * CUDART_PI_F * u2;
+    const float r = sqrtf(1.0f - u1 * u1);
+    const float phi = 2 * CUDART_PI_F * u2;
 
-	return glm::vec3(cosf(phi) * r, sinf(phi) * r, u1);
+    return glm::vec3(cosf(phi) * r, sinf(phi) * r, u1);
 }
 
 struct Intersect
 {
-	Intersect() = default;
-	__device__ void operator=(const Intersect& rhs)
-	{
-		m_intersectionPoint = rhs.m_intersectionPoint;
-		m_normal = rhs.m_normal;
-		m_tangent = rhs.m_tangent;
-		m_bitangent = rhs.m_bitangent;
-		m_t = rhs.m_t;
-		geometryIndex = rhs.geometryIndex;
-		triangleIndex = rhs.triangleIndex;
-	}
+    Intersect() = default;
+    __device__ void operator=(const Intersect& rhs)
+    {
+        m_intersectionPoint = rhs.m_intersectionPoint;
+        m_normal = rhs.m_normal;
+        m_tangent = rhs.m_tangent;
+        m_bitangent = rhs.m_bitangent;
+        m_t = rhs.m_t;
+        geometryIndex = rhs.geometryIndex;
+        triangleIndex = rhs.triangleIndex;
+    }
 
-	glm::vec3 m_intersectionPoint;
-	glm::vec3 m_normal;
-	glm::vec3 m_tangent;
-	glm::vec3 m_bitangent;
-	float m_t{ 0.f };
-	int geometryIndex{ -1 };
-	int triangleIndex{ -1 };
+    glm::vec3 m_intersectionPoint;
+    glm::vec3 m_normal;
+    glm::vec3 m_tangent;
+    glm::vec3 m_bitangent;
+    float m_t{ 0.f };
+    int geometryIndex{ -1 };
+    int triangleIndex{ -1 };
 };
 
 enum BXDFTyp
 {
-	EMITTER,
-	DIFFUSE,
-	MIRROR,
-	GLASS,
-	COUNT
+    EMITTER,
+    DIFFUSE,
+    MIRROR,
+    GLASS,
+    COUNT
 };
 
 
@@ -227,1097 +227,1097 @@ enum BXDFTyp
 __device__ inline void calculateCoordinateAxes(glm::vec3 normal, glm::vec3& tangent, glm::vec3& bitangent)
 {
 #ifdef DUFF_ONB
-	// Duff et al. Building an Orthonormal Basis, Revisited:
-	// http://jcgt.org/published/0006/01/01/paper.pdf
-	// supposed to be faster
-	float sign = copysignf(1.0f, normal.z);
-	const float a = -1.0f / (sign + normal.z);
-	const float b = normal.x * normal.y * a;
-	tangent = glm::vec3(1.0f + sign * normal.x * normal.x * a, sign * b, -sign * normal.x);
-	bitangent = glm::vec3(b, sign + normal.y * normal.y * a, -normal.y);
+    // Duff et al. Building an Orthonormal Basis, Revisited:
+    // http://jcgt.org/published/0006/01/01/paper.pdf
+    // supposed to be faster
+    float sign = copysignf(1.0f, normal.z);
+    const float a = -1.0f / (sign + normal.z);
+    const float b = normal.x * normal.y * a;
+    tangent = glm::vec3(1.0f + sign * normal.x * normal.x * a, sign * b, -sign * normal.x);
+    bitangent = glm::vec3(b, sign + normal.y * normal.y * a, -normal.y);
 #else
-	if (normal.x > normal.y)
-	{
-		tangent = glm::normalize(glm::vec3(-normal.z, 0.f, normal.x));
-	}
-	else
-	{
-		tangent = glm::normalize(glm::vec3(0.f, -normal.z, normal.y));
-	}
-	bitangent = glm::normalize(glm::cross(normal, tangent));
+    if (normal.x > normal.y)
+    {
+        tangent = glm::normalize(glm::vec3(-normal.z, 0.f, normal.x));
+    }
+    else
+    {
+        tangent = glm::normalize(glm::vec3(0.f, -normal.z, normal.y));
+    }
+    bitangent = glm::normalize(glm::cross(normal, tangent));
 #endif
 }
 
 struct BXDF
 {
-	BXDF() = default;
-	
-	BXDFTyp m_type{ BXDFTyp::COUNT };
+    BXDF() = default;
 
-	glm::vec3 m_albedo{ -1,-1,-1 };
-	glm::vec3 m_specularColor{ -1,-1,-1 };
-	float m_refractiveIndex{ -1 };
-	glm::vec3 m_emissiveColor{ -1,-1,-1 };
-	float m_intensity{ -1 };
-	glm::vec3 m_transmittanceColor{ -1,-1,-1 };
-	
-	/**
-	 * @brief calculates the PDF of a given outgoing (newly sampled bsdf direction) direction
-	 * @param incoming (INPUT): tangent space direction that is going out of the point of intersection from the previous ray
-	 * @param outgoing (INPUT): tangent space direction that is going out to be traced into the next scene
-	 * @return floating point value of the PDF of the sampled outgoing ray
-	*/
-	__device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming)
-	{
-		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-		if (m_type == BXDFTyp::DIFFUSE)
-		{
-			// cosine weighted hemisphere sampling: cosTheta / PI
-			return incoming.z * outgoing.z > 0.f ? glm::abs(incoming.z) * CUDART_2_OVER_PI_F * 0.5f : 0.f;
+    BXDFTyp m_type{ BXDFTyp::COUNT };
 
-			// uniform hemisphere sampling: 1 / 2*PI
-			//return CUDART_2_OVER_PI_F * 0.25f;
-		}
-		else if (m_type == BXDFTyp::MIRROR )
-		{
-			return 1.f;
-		}
-		else if (m_type == BXDFTyp::GLASS)
-		{
-			return 0.5f;
-		}
-		return 0.f;
-	}
+    glm::vec3 m_albedo{ -1,-1,-1 };
+    glm::vec3 m_specularColor{ -1,-1,-1 };
+    float m_refractiveIndex{ -1 };
+    glm::vec3 m_emissiveColor{ -1,-1,-1 };
+    float m_intensity{ -1 };
+    glm::vec3 m_transmittanceColor{ -1,-1,-1 };
 
-	__device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming, const Intersect& intersect)
-	{
-		// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-		if (m_type == BXDFTyp::DIFFUSE)
-		{
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
-			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
-			glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
-			// cosine weighted hemisphere sampling: cosTheta / PI
-			return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceIncoming.z) * CUDART_2_OVER_PI_F * 0.5f : 0.f;
+    /**
+     * @brief calculates the PDF of a given outgoing (newly sampled bsdf direction) direction
+     * @param incoming (INPUT): tangent space direction that is going out of the point of intersection from the previous ray
+     * @param outgoing (INPUT): tangent space direction that is going out to be traced into the next scene
+     * @return floating point value of the PDF of the sampled outgoing ray
+    */
+    __device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming)
+    {
+        // CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+        if (m_type == BXDFTyp::DIFFUSE)
+        {
+            // cosine weighted hemisphere sampling: cosTheta / PI
+            return incoming.z * outgoing.z > 0.f ? glm::abs(incoming.z) * CUDART_2_OVER_PI_F * 0.5f : 0.f;
 
-			// uniform hemisphere sampling: 1 / 2*PI
-			//return CUDART_2_OVER_PI_F * 0.25f;
-		}
-		else if (m_type == BXDFTyp::MIRROR || m_type == BXDFTyp::GLASS)
-		{
-			return 1.f;
-		}
-		return 0.f;
-	}
+            // uniform hemisphere sampling: 1 / 2*PI
+            //return CUDART_2_OVER_PI_F * 0.25f;
+        }
+        else if (m_type == BXDFTyp::MIRROR)
+        {
+            return 1.f;
+        }
+        else if (m_type == BXDFTyp::GLASS)
+        {
+            return 0.5f;
+        }
+        return 0.f;
+    }
 
-	__device__ glm::vec3 faceForward(const glm::vec3& n, const glm::vec3& v)
-	{
-		return (glm::dot(n, v) < 0.f) ? -n : n;
-	}
+    __device__ float pdf(const glm::vec3& outgoing, const glm::vec3& incoming, const Intersect& intersect)
+    {
+        // CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+        if (m_type == BXDFTyp::DIFFUSE)
+        {
+            glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+            glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
+            glm::vec3 tangentSpaceIncoming = worldToLocal * incoming;
+            // cosine weighted hemisphere sampling: cosTheta / PI
+            return tangentSpaceIncoming.z * tangentSpaceOutgoing.z > 0.f ? glm::abs(tangentSpaceIncoming.z) * CUDART_2_OVER_PI_F * 0.5f : 0.f;
 
-	__device__ glm::vec3 refract(const glm::vec3& wi, const glm::vec3& normal, float eta)
-	{
-		float cosThetaI = glm::dot(normal, wi);
-		float sin2ThetaI = fmaxf(0.f, 1.f - cosThetaI * cosThetaI);
-		float sin2ThetaT = eta * eta * sin2ThetaI;
-		
-		if (sin2ThetaT >= 1.f)
-		{
-			// this means that the ray has reflected (TIR-ed)
-			return glm::normalize(glm::reflect(-wi, normal));
-		}
+            // uniform hemisphere sampling: 1 / 2*PI
+            //return CUDART_2_OVER_PI_F * 0.25f;
+        }
+        else if (m_type == BXDFTyp::MIRROR || m_type == BXDFTyp::GLASS)
+        {
+            return 1.f;
+        }
+        return 0.f;
+    }
 
-		float cosThetaT = sqrtf(1.f - sin2ThetaT);
+    __device__ glm::vec3 faceForward(const glm::vec3& n, const glm::vec3& v)
+    {
+        return (glm::dot(n, v) < 0.f) ? -n : n;
+    }
 
-		return(eta * -wi + (eta * cosThetaI - cosThetaT) * normal);
-	}
+    __device__ glm::vec3 refract(const glm::vec3& wi, const glm::vec3& normal, float eta)
+    {
+        float cosThetaI = glm::dot(normal, wi);
+        float sin2ThetaI = fmaxf(0.f, 1.f - cosThetaI * cosThetaI);
+        float sin2ThetaT = eta * eta * sin2ThetaI;
 
-	__device__ glm::vec3 f(glm::vec3 worldSpaceOutgoing, glm::vec3 worldSpaceIncoming, const Intersect& intersect)
-	{
-		if (m_type == BXDFTyp::DIFFUSE)
-		{
-			// albedo * cosI / PI
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
-			glm::vec3 tangentSpaceIncoming = worldToLocal * worldSpaceIncoming;
-			glm::vec3 tangentSpaceOutgoing = worldToLocal * worldSpaceOutgoing;
-			return (tangentSpaceOutgoing.z > 0.f) ? m_albedo * CUDART_2_OVER_PI_F * 0.5f * fabsf(tangentSpaceIncoming.z) : glm::vec3(0.f);
-		}
-		return glm::vec3(0.f);
-	}
+        if (sin2ThetaT >= 1.f)
+        {
+            // this means that the ray has reflected (TIR-ed)
+            return glm::normalize(glm::reflect(-wi, normal));
+        }
 
-	__device__ float4 fresnel(float cosThetaI, float etaI, float etaT)
-	{
-		cosThetaI = glm::clamp(cosThetaI, -1.f, 1.f);
-		// Potentially swap indices of refraction 
-		bool entering = cosThetaI > 0.f;
-		float eta = etaI / etaT;
-		if (!entering)
-		{
-			float temp = etaI;
-			etaI = etaT;
-			etaT = temp;
-			cosThetaI = fabsf(cosThetaI);
-		}
+        float cosThetaT = sqrtf(1.f - sin2ThetaT);
 
-		// Compute cosThetaT using Snell’s law 
-		float sinThetaI = std::sqrt(fmaxf(0.f, 1.f - cosThetaI * cosThetaI));
-		float sinThetaT = etaI / etaT * sinThetaI;
-		// Handle total internal reflection 
-		//if (sinThetaT >= 1.f)
-		//	return 1.f;
-		float cosThetaT = std::sqrt(fmaxf(0.f, 1.f - sinThetaT * sinThetaT));
+        return(eta * -wi + (eta * cosThetaI - cosThetaT) * normal);
+    }
 
-		float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) / ((etaT * cosThetaI) + (etaI * cosThetaT));
-		float Rperp = ((etaI * cosThetaI) - (etaT * cosThetaT)) / ((etaI * cosThetaI) + (etaT * cosThetaT));
-		float reflCoefficient = (Rparl * Rparl + Rperp * Rperp) / 2.f;
+    __device__ glm::vec3 f(glm::vec3 worldSpaceOutgoing, glm::vec3 worldSpaceIncoming, const Intersect& intersect)
+    {
+        if (m_type == BXDFTyp::DIFFUSE)
+        {
+            // albedo * cosI / PI
+            glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+            glm::vec3 tangentSpaceIncoming = worldToLocal * worldSpaceIncoming;
+            glm::vec3 tangentSpaceOutgoing = worldToLocal * worldSpaceOutgoing;
+            return (tangentSpaceOutgoing.z > 0.f) ? m_albedo * CUDART_2_OVER_PI_F * 0.5f * fabsf(tangentSpaceIncoming.z) : glm::vec3(0.f);
+        }
+        return glm::vec3(0.f);
+    }
 
-		float cosThetaT_WithSign = entering ? -cosThetaT : cosThetaT;
+    __device__ float4 fresnel(float cosThetaI, float etaI, float etaT)
+    {
+        cosThetaI = glm::clamp(cosThetaI, -1.f, 1.f);
+        // Potentially swap indices of refraction 
+        bool entering = cosThetaI > 0.f;
+        float eta = etaI / etaT;
+        if (!entering)
+        {
+            float temp = etaI;
+            etaI = etaT;
+            etaT = temp;
+            cosThetaI = fabsf(cosThetaI);
+        }
 
-		return make_float4(reflCoefficient, cosThetaT_WithSign, entering ? eta : 1/eta, entering ? 1/eta : eta);
-	}
+        // Compute cosThetaT using Snell’s law 
+        float sinThetaI = std::sqrt(fmaxf(0.f, 1.f - cosThetaI * cosThetaI));
+        float sinThetaT = etaI / etaT * sinThetaI;
+        // Handle total internal reflection 
+        //if (sinThetaT >= 1.f)
+        //  return 1.f;
+        float cosThetaT = std::sqrt(fmaxf(0.f, 1.f - sinThetaT * sinThetaT));
 
-	/**
-	 * @brief sampleBsdf samples the bsdf depending on which one it is and sends back the 
-	 *		  glm::vec3 scalar. Along with the randomly sampled bsdf direction and its 
-	 *        (the newly generated sample's) corresponding pdf. The outgoing vector is in world space. So we need to construct TBN in tangent space
-	 * @param outgoing (INPUT): the direction of the previous path segment that intersected with current geom that is going out of the point of intersection
-	 * @param incoming (OUTPUT): the direction that will be sampled based on the bsdf lobe. Incoming here is denoted as incoming because it is assumed this ray is incoming from the emitter
-	 * @param intersect (INPUT): the intersect object containing the normal at the point of intersection
-	 * @param bsdfPDF (OUTPUT): the PDF of the sample we generate based on the lobe
-	 * @param depth (INPUT): depth of the trace currently. Used to generate a unique random seed
-	 * @param isSpecular (INPUT): if the currrent bsdf is specular (transmissive/reflective), we mark this true for NEE calculation
-	 * @return : glm::vec3 scalar value of the object's color information
-	*/
-	__device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, Intersect& intersect, float& bsdfPDF, int depth, bool& isSpecular)
-	{
-		//ASSUMPTION: incoming vector points away from the point of intersection
+        float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) / ((etaT * cosThetaI) + (etaI * cosThetaT));
+        float Rperp = ((etaI * cosThetaI) - (etaT * cosThetaT)) / ((etaI * cosThetaI) + (etaT * cosThetaT));
+        float reflCoefficient = (Rparl * Rparl + Rperp * Rperp) / 2.f;
 
-		if (m_type == BXDFTyp::EMITTER)
-		{
-			// CLARIFICATION: we assume that all area lights are two-sided
-			bool twoSided = true;
-			incoming = glm::vec3(0.f);
-			// means we have a light source
-			return ((twoSided || glm::dot(intersect.m_normal, outgoing) > 0.f)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);
-		}
-		
-		if (m_type == BXDFTyp::DIFFUSE)
-		{
-			// sample a point on hemisphere to return an outgoing ray
-			glm::vec2 sample;
+        float cosThetaT_WithSign = entering ? -cosThetaT : cosThetaT;
 
-			int x = blockIdx.x * blockDim.x + threadIdx.x;
-			/* Each thread gets same seed, a different sequence
-			   number, no offset */
-			curandState state1;
-			curand_init((unsigned long long)clock() + x, x, 0, &state1);
-			sample[0] = curand_uniform(&state1);
-			sample[1] = curand_uniform(&state1);
-			// do warp from square to cosine weighted hemisphere
-			// we calculate tangent and bitangent only here where we need it
-			// 2 matrix multiplications need to happen with a world space normal:
-			// transpose of the TBN (TangentBitangentNormal) matrix to calculate
-			// the tangent space outgoing direction. So when we sample the bsdf, 
-			// technically we sample the lobe in tangent space.
-			// This means that once we have a tangent space sampled direction (incoming),
-			// we need to convert this to world space
+        return make_float4(reflCoefficient, cosThetaT_WithSign, entering ? eta : 1 / eta, entering ? 1 / eta : eta);
+    }
 
-			calculateCoordinateAxes(intersect.m_normal, intersect.m_tangent, intersect.m_bitangent);
-			glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
-			glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
-			//incoming = UniformHemisphereSample(sample[0], sample[1]);
-			incoming = CosineSampleHemisphere(sample[0], sample[1]);
-			if (tangentSpaceOutgoing.z < 0.f)
-			{
-				incoming.z *= -1.f;
-			}
-			
-			bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
-			// convert tangent space bsdf sampled direction (incoming) to world space
-			incoming = glm::normalize(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * incoming);
-			isSpecular = false;
-			// albedo / PI
-			return bsdfPDF > 0.f ? m_albedo : glm::vec3(0.f)/** CUDART_2_OVER_PI_F * 0.5f*/;
-		}
-		else if (m_type == BXDFTyp::MIRROR)
-		{
-			// there's only 1 way for this outgoing ray to bend
-			incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
-			bsdfPDF = pdf(outgoing, incoming);
+    /**
+     * @brief sampleBsdf samples the bsdf depending on which one it is and sends back the
+     *        glm::vec3 scalar. Along with the randomly sampled bsdf direction and its
+     *        (the newly generated sample's) corresponding pdf. The outgoing vector is in world space. So we need to construct TBN in tangent space
+     * @param outgoing (INPUT): the direction of the previous path segment that intersected with current geom that is going out of the point of intersection
+     * @param incoming (OUTPUT): the direction that will be sampled based on the bsdf lobe. Incoming here is denoted as incoming because it is assumed this ray is incoming from the emitter
+     * @param intersect (INPUT): the intersect object containing the normal at the point of intersection
+     * @param bsdfPDF (OUTPUT): the PDF of the sample we generate based on the lobe
+     * @param depth (INPUT): depth of the trace currently. Used to generate a unique random seed
+     * @param isSpecular (INPUT): if the currrent bsdf is specular (transmissive/reflective), we mark this true for NEE calculation
+     * @return : glm::vec3 scalar value of the object's color information
+    */
+    __device__ glm::vec3 sampleBsdf(const glm::vec3& outgoing, glm::vec3& incoming, Intersect& intersect, float& bsdfPDF, int depth, bool& isSpecular)
+    {
+        //ASSUMPTION: incoming vector points away from the point of intersection
 
-			isSpecular = true;
-			return m_specularColor;
-		}
-		else if (m_type == BXDFTyp::GLASS)
-		{
-			// there's only 1 way for this outgoing ray to bend
-			float airRefractiveIndex = 1.f;
-			bool entering = glm::dot(intersect.m_normal, outgoing) > 0;
-			float eta = entering ?  airRefractiveIndex / m_refractiveIndex  : m_refractiveIndex / airRefractiveIndex;
-			
-			// mitsuba's implementation
-			float4 fresnelCoeff = fresnel(glm::dot(intersect.m_normal, outgoing), airRefractiveIndex, m_refractiveIndex);
+        if (m_type == BXDFTyp::EMITTER)
+        {
+            // CLARIFICATION: we assume that all area lights are two-sided
+            bool twoSided = true;
+            incoming = glm::vec3(0.f);
+            // means we have a light source
+            return ((twoSided || glm::dot(intersect.m_normal, outgoing) > 0.f)) ? m_emissiveColor * m_intensity : glm::vec3(0.f);
+        }
 
-			float fresnelTransmissionCoeff = 1.f - fresnelCoeff.x;
-			int x = blockIdx.x * blockDim.x + threadIdx.x;
-			curandState state1;
-			curand_init((unsigned long long)clock() + x, x, 0, &state1);
-			float sample1 = curand_uniform(&state1);
-			bool reflection = sample1 <= fresnelCoeff.x;
+        if (m_type == BXDFTyp::DIFFUSE)
+        {
+            // sample a point on hemisphere to return an outgoing ray
+            glm::vec2 sample;
 
-			bsdfPDF = reflection ? fresnelCoeff.x : fresnelTransmissionCoeff;
-			bool transmission = !reflection;
-			
-			incoming = transmission ? refract(outgoing, faceForward(intersect.m_normal, outgoing), eta) : glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+            int x = blockIdx.x * blockDim.x + threadIdx.x;
+            /* Each thread gets same seed, a different sequence
+               number, no offset */
+            curandState state1;
+            curand_init((unsigned long long)clock() + x, x, 0, &state1);
+            sample[0] = curand_uniform(&state1);
+            sample[1] = curand_uniform(&state1);
+            // do warp from square to cosine weighted hemisphere
+            // we calculate tangent and bitangent only here where we need it
+            // 2 matrix multiplications need to happen with a world space normal:
+            // transpose of the TBN (TangentBitangentNormal) matrix to calculate
+            // the tangent space outgoing direction. So when we sample the bsdf, 
+            // technically we sample the lobe in tangent space.
+            // This means that once we have a tangent space sampled direction (incoming),
+            // we need to convert this to world space
 
-			isSpecular = true;
-			
-			return (transmission ? fresnelTransmissionCoeff * fresnelTransmissionCoeff * m_transmittanceColor : fresnelCoeff.x * m_specularColor) / bsdfPDF;
-		}
-		bsdfPDF = -1.f;
-		return glm::vec3(0.f);
-	}
+            calculateCoordinateAxes(intersect.m_normal, intersect.m_tangent, intersect.m_bitangent);
+            glm::mat3 worldToLocal = glm::transpose(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal));
+            glm::vec3 tangentSpaceOutgoing = worldToLocal * outgoing;
+            //incoming = UniformHemisphereSample(sample[0], sample[1]);
+            incoming = CosineSampleHemisphere(sample[0], sample[1]);
+            if (tangentSpaceOutgoing.z < 0.f)
+            {
+                incoming.z *= -1.f;
+            }
+
+            bsdfPDF = pdf(tangentSpaceOutgoing, incoming);
+            // convert tangent space bsdf sampled direction (incoming) to world space
+            incoming = glm::normalize(glm::mat3(intersect.m_tangent, intersect.m_bitangent, intersect.m_normal) * incoming);
+            isSpecular = false;
+            // albedo / PI
+            return bsdfPDF > 0.f ? m_albedo : glm::vec3(0.f)/** CUDART_2_OVER_PI_F * 0.5f*/;
+        }
+        else if (m_type == BXDFTyp::MIRROR)
+        {
+            // there's only 1 way for this outgoing ray to bend
+            incoming = glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+            bsdfPDF = pdf(outgoing, incoming);
+
+            isSpecular = true;
+            return m_specularColor;
+        }
+        else if (m_type == BXDFTyp::GLASS)
+        {
+            // there's only 1 way for this outgoing ray to bend
+            float airRefractiveIndex = 1.f;
+            bool entering = glm::dot(intersect.m_normal, outgoing) > 0;
+            float eta = entering ? airRefractiveIndex / m_refractiveIndex : m_refractiveIndex / airRefractiveIndex;
+
+            // mitsuba's implementation
+            float4 fresnelCoeff = fresnel(glm::dot(intersect.m_normal, outgoing), airRefractiveIndex, m_refractiveIndex);
+
+            float fresnelTransmissionCoeff = 1.f - fresnelCoeff.x;
+            int x = blockIdx.x * blockDim.x + threadIdx.x;
+            curandState state1;
+            curand_init((unsigned long long)clock() + x, x, 0, &state1);
+            float sample1 = curand_uniform(&state1);
+            bool reflection = sample1 <= fresnelCoeff.x;
+
+            bsdfPDF = reflection ? fresnelCoeff.x : fresnelTransmissionCoeff;
+            bool transmission = !reflection;
+
+            incoming = transmission ? refract(outgoing, faceForward(intersect.m_normal, outgoing), eta) : glm::normalize(glm::reflect(-outgoing, intersect.m_normal));
+
+            isSpecular = true;
+
+            return (transmission ? fresnelTransmissionCoeff * fresnelTransmissionCoeff * m_transmittanceColor : fresnelCoeff.x * m_specularColor) / bsdfPDF;
+        }
+        bsdfPDF = -1.f;
+        return glm::vec3(0.f);
+    }
 };
 
 enum GeometryType
 {
-	SPHERE,
-	PLANE,
-	TRIANGLEMESH
+    SPHERE,
+    PLANE,
+    TRIANGLEMESH
 };
 
 struct Triangle
 {
-	Triangle() = default;
-	Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
-		glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2,
-		glm::vec3 n0, glm::vec3 n1, glm::vec3 n2)
-		:m_v0(v0), m_v1(v1), m_v2(v2),
-		m_uv0(uv0), m_uv1(uv1), m_uv2(uv2),
-		m_n0(n0), m_n1(n1), m_n2(n2)
-	{
-		edge0 = v1 - v0, edge1 = v2 - v0;
-		d00 = glm::dot(edge0, edge0);
-		d01 = glm::dot(edge0, edge1);
-		d11 = glm::dot(edge1, edge1);
-		invDenom = 1.f / (d00 * d11 - d01 * d01);
-	}
+    Triangle() = default;
+    Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
+        glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2,
+        glm::vec3 n0, glm::vec3 n1, glm::vec3 n2)
+        :m_v0(v0), m_v1(v1), m_v2(v2),
+        m_uv0(uv0), m_uv1(uv1), m_uv2(uv2),
+        m_n0(n0), m_n1(n1), m_n2(n2)
+    {
+        edge0 = v1 - v0, edge1 = v2 - v0;
+        d00 = glm::dot(edge0, edge0);
+        d01 = glm::dot(edge0, edge1);
+        d11 = glm::dot(edge1, edge1);
+        invDenom = 1.f / (d00 * d11 - d01 * d01);
+    }
 
-	float area() const
-	{
-		return 0.5f * glm::length(glm::cross(m_v1 - m_v0, m_v2 - m_v0));
-	}
+    float area() const
+    {
+        return 0.5f * glm::length(glm::cross(m_v1 - m_v0, m_v2 - m_v0));
+    }
 
-	// Vertices
-	glm::vec3 m_v0;
-	glm::vec3 m_v1;
-	glm::vec3 m_v2;
-	// UV's
-	glm::vec2 m_uv0;
-	glm::vec2 m_uv1;
-	glm::vec2 m_uv2;
-	// Normals
-	glm::vec3 m_n0;
-	glm::vec3 m_n1;
-	glm::vec3 m_n2;
+    // Vertices
+    glm::vec3 m_v0;
+    glm::vec3 m_v1;
+    glm::vec3 m_v2;
+    // UV's
+    glm::vec2 m_uv0;
+    glm::vec2 m_uv1;
+    glm::vec2 m_uv2;
+    // Normals
+    glm::vec3 m_n0;
+    glm::vec3 m_n1;
+    glm::vec3 m_n2;
 
-	// for barycentric calculations
-	glm::vec3 edge0;
-	glm::vec3 edge1;
-	float d00;
-	float d01;
-	float d11;
-	float invDenom;
+    // for barycentric calculations
+    glm::vec3 edge0;
+    glm::vec3 edge1;
+    float d00;
+    float d01;
+    float d11;
+    float invDenom;
 };
 
 struct Geometry
 {
-	Geometry() = default;
-	Geometry(const char* name, GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle> triangles = std::vector<Triangle>(), float radius = 0.f)
-		:m_name(name), m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
-	{
-		// Translate Matrix
-		glm::mat4 translateM = glm::translate(glm::mat4(1.0f), m_position);
-		// Rotate Matrix
-		glm::mat4 rotateM = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-		rotateM *= glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-		rotateM *= glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-		// Scale Matrix
-		glm::mat4 scaleM = glm::scale(glm::mat4(1.0f), m_scale);
-		m_modelMatrix = translateM * rotateM * scaleM;
+    Geometry() = default;
+    Geometry(const char* name, GeometryType geometryType, glm::vec3 position, glm::vec3 rotation, glm::vec3 scale, std::vector<Triangle> triangles = std::vector<Triangle>(), float radius = 0.f)
+        :m_name(name), m_geometryType(geometryType), m_position(position), m_rotation(rotation), m_scale(scale)
+    {
+        // Translate Matrix
+        glm::mat4 translateM = glm::translate(glm::mat4(1.0f), m_position);
+        // Rotate Matrix
+        glm::mat4 rotateM = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+        rotateM *= glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+        rotateM *= glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        // Scale Matrix
+        glm::mat4 scaleM = glm::scale(glm::mat4(1.0f), m_scale);
+        m_modelMatrix = translateM * rotateM * scaleM;
 
-		m_inverseModelMatrix = glm::inverse(m_modelMatrix);
-		m_invTransModelMatrix = glm::inverse(glm::transpose(m_modelMatrix));
+        m_inverseModelMatrix = glm::inverse(m_modelMatrix);
+        m_invTransModelMatrix = glm::inverse(glm::transpose(m_modelMatrix));
 
-		switch (m_geometryType)
-		{
-			case GeometryType::SPHERE:
-				m_sphereRadius = radius;
-				m_surfaceArea = 4.f * CUDART_PI_F * m_sphereRadius * m_sphereRadius;
-				break;
-			case GeometryType::PLANE:
-				m_surfaceArea = scale.x * scale.y;
-				break;
-			case GeometryType::TRIANGLEMESH:
-			{
-				if (triangles.empty())
-					return;
-				m_numberOfTriangles = static_cast<int>(triangles.size());
-				m_triangles = new Triangle[m_numberOfTriangles];
-				for (int i = 0; i < m_numberOfTriangles; ++i)
-				{
-					m_triangles[i] = triangles[i];
-					m_surfaceArea += triangles[i].area();
-				}
-				break;
-			}
-			default:
-				std::cout << "Geometry type is not supported yet!" << std::endl;
-		}
-	}
+        switch (m_geometryType)
+        {
+        case GeometryType::SPHERE:
+            m_sphereRadius = radius;
+            m_surfaceArea = 4.f * CUDART_PI_F * m_sphereRadius * m_sphereRadius;
+            break;
+        case GeometryType::PLANE:
+            m_surfaceArea = scale.x * scale.y;
+            break;
+        case GeometryType::TRIANGLEMESH:
+        {
+            if (triangles.empty())
+                return;
+            m_numberOfTriangles = static_cast<int>(triangles.size());
+            m_triangles = new Triangle[m_numberOfTriangles];
+            for (int i = 0; i < m_numberOfTriangles; ++i)
+            {
+                m_triangles[i] = triangles[i];
+                m_surfaceArea += triangles[i].area();
+            }
+            break;
+        }
+        default:
+            std::cout << "Geometry type is not supported yet!" << std::endl;
+        }
+    }
 
-	__device__ bool sampleLight(glm::vec2 sample, Intersect& worldSpaceIntersect) const
-	{
-		bool sampledLight = false;
-		if (m_geometryType == GeometryType::PLANE)
-		{
-			// transform sample to world space
-			worldSpaceIntersect.m_intersectionPoint = m_modelMatrix * glm::vec4(sample.x - 0.5f, sample.y - 0.5f, 0.f, 1.f);
-			sampledLight = true;
-		}
-		if (m_geometryType == GeometryType::TRIANGLEMESH)
-		{
-			curandState state1;
-			curand_init((unsigned long long)clock(), 0, 0, &state1);
-			int randIdx = curand_uniform(&state1) * ((sizeof(m_triangles))/(sizeof(m_triangles[0])));
+    __device__ bool sampleLight(glm::vec2 sample, Intersect& worldSpaceIntersect) const
+    {
+        bool sampledLight = false;
+        if (m_geometryType == GeometryType::PLANE)
+        {
+            // transform sample to world space
+            worldSpaceIntersect.m_intersectionPoint = m_modelMatrix * glm::vec4(sample.x - 0.5f, sample.y - 0.5f, 0.f, 1.f);
+            sampledLight = true;
+        }
+        if (m_geometryType == GeometryType::TRIANGLEMESH)
+        {
+            curandState state1;
+            curand_init((unsigned long long)clock(), 0, 0, &state1);
+            int randIdx = curand_uniform(&state1) * ((sizeof(m_triangles)) / (sizeof(m_triangles[0])));
 
-			Triangle randomlySampleTriangle = m_triangles[randIdx];
+            Triangle randomlySampleTriangle = m_triangles[randIdx];
 
-			float su0 = std::sqrt(sample[0]);
-			glm::vec2 uniformPointOnTriangle(1 - su0, sample[1] * su0);
-			worldSpaceIntersect.m_intersectionPoint = m_modelMatrix * glm::vec4(uniformPointOnTriangle[0] * randomlySampleTriangle.m_v0 +
-												uniformPointOnTriangle[1] * randomlySampleTriangle.m_v1 + 
-												(1 - uniformPointOnTriangle[0] - uniformPointOnTriangle[1]) * randomlySampleTriangle.m_v2, 1.f);
-			sampledLight = true;
-		}
-		return sampledLight;
-	}
+            float su0 = std::sqrt(sample[0]);
+            glm::vec2 uniformPointOnTriangle(1 - su0, sample[1] * su0);
+            worldSpaceIntersect.m_intersectionPoint = m_modelMatrix * glm::vec4(uniformPointOnTriangle[0] * randomlySampleTriangle.m_v0 +
+                uniformPointOnTriangle[1] * randomlySampleTriangle.m_v1 +
+                (1 - uniformPointOnTriangle[0] - uniformPointOnTriangle[1]) * randomlySampleTriangle.m_v2, 1.f);
+            sampledLight = true;
+        }
+        return sampledLight;
+    }
 
-	// Types:
-	// 1 - Plane
-	// 2 - Triangle Mesh
-	// 3 - Sphere
-	GeometryType m_geometryType;
-	glm::vec3 m_position;
-	glm::vec3 m_rotation;
-	glm::vec3 m_scale;
-	glm::mat4 m_modelMatrix;
+    // Types:
+    // 1 - Plane
+    // 2 - Triangle Mesh
+    // 3 - Sphere
+    GeometryType m_geometryType;
+    glm::vec3 m_position;
+    glm::vec3 m_rotation;
+    glm::vec3 m_scale;
+    glm::mat4 m_modelMatrix;
 
-	glm::mat4 m_inverseModelMatrix;
+    glm::mat4 m_inverseModelMatrix;
 
-	glm::mat4 m_invTransModelMatrix;
+    glm::mat4 m_invTransModelMatrix;
 
-	float m_surfaceArea;
+    float m_surfaceArea;
 
-	float m_sphereRadius;
-	// CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
-	glm::vec3 m_normal{0,0,1};
-	Triangle* m_triangles{ nullptr };
-	int m_numberOfTriangles{ 0 };
+    float m_sphereRadius;
+    // CLARIFICATION: normal of geometry is in its object space, this will be used in intersections/shading
+    glm::vec3 m_normal{ 0,0,1 };
+    Triangle* m_triangles{ nullptr };
+    int m_numberOfTriangles{ 0 };
 
-	BXDF* m_bxdf{nullptr};
+    BXDF* m_bxdf{ nullptr };
 
-	const char* m_name;
+    const char* m_name;
 };
 
 struct Ray
 {
-	Ray() = default;
-	__device__ Ray(glm::vec3 origin, glm::vec3 direction)
-		:m_origin(origin), m_direction(glm::normalize(direction))
-	{
-	}
-	__device__ Ray& operator=(const Ray& otherRay) 
-	{
-		m_origin = otherRay.m_origin;
-		m_direction = otherRay.m_direction;
-		return *this;
-	}
-	__device__ Ray(const Ray& otherRay) 
-	{
-		m_origin = otherRay.m_origin;
-		m_direction = otherRay.m_direction;
-	}
+    Ray() = default;
+    __device__ Ray(glm::vec3 origin, glm::vec3 direction)
+        :m_origin(origin), m_direction(glm::normalize(direction))
+    {
+    }
+    __device__ Ray& operator=(const Ray& otherRay)
+    {
+        m_origin = otherRay.m_origin;
+        m_direction = otherRay.m_direction;
+        return *this;
+    }
+    __device__ Ray(const Ray& otherRay)
+    {
+        m_origin = otherRay.m_origin;
+        m_direction = otherRay.m_direction;
+    }
 
-	glm::vec3 m_origin;
-	glm::vec3 m_direction;
-	// TODO: Padding
+    glm::vec3 m_origin;
+    glm::vec3 m_direction;
+    // TODO: Padding
 };
 
 struct Camera
 {
-	glm::vec3 m_position;
-	glm::vec3 m_up;
-	glm::vec3 m_right;
-	glm::vec3 m_forward;
+    glm::vec3 m_position;
+    glm::vec3 m_up;
+    glm::vec3 m_right;
+    glm::vec3 m_forward;
 
-	glm::vec3 m_worldUp;
+    glm::vec3 m_worldUp;
 
-	float m_yaw;
-	float m_pitch;
+    float m_yaw;
+    float m_pitch;
 
-	float m_screenWidth;
-	float m_screenHeight;
-	float m_fov;
-	float m_nearClip;
-	float m_farClip;
-	// Camera options
-	float m_cameraMovementSpeed = 0.2f;
-	float m_cameraMouseSensitivity = 0.2f;
-	bool m_cameraFirstMouseInput = false;
-	float m_xDelta = 0.f;
-	float m_yDelta = 0.f;
+    float m_screenWidth;
+    float m_screenHeight;
+    float m_fov;
+    float m_nearClip;
+    float m_farClip;
+    // Camera options
+    float m_cameraMovementSpeed = 0.2f;
+    float m_cameraMouseSensitivity = 0.2f;
+    bool m_cameraFirstMouseInput = false;
+    float m_xDelta = 0.f;
+    float m_yDelta = 0.f;
 
-	glm::mat4 m_invViewProj;
+    glm::mat4 m_invViewProj;
 
-	void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight)
-	{
-		m_screenWidth = screenWidth;
-		m_screenHeight = screenHeight;
-	}
+    void UpdateCameraScreenWidthAndHeight(float screenWidth, float screenHeight)
+    {
+        m_screenWidth = screenWidth;
+        m_screenHeight = screenHeight;
+    }
 
-	glm::mat4 GetViewMatrix()
-	{
-		return glm::lookAtRH(m_position, m_position + m_forward, m_up);
-	}
+    glm::mat4 GetViewMatrix()
+    {
+        return glm::lookAtRH(m_position, m_position + m_forward, m_up);
+    }
 
-	glm::mat4 GetInverseViewMatrix()
-	{
-		return glm::inverse(GetViewMatrix());
-	}
+    glm::mat4 GetInverseViewMatrix()
+    {
+        return glm::inverse(GetViewMatrix());
+    }
 
-	glm::mat4 GetProjectionMatrix()
-	{
-		return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
-	}
+    glm::mat4 GetProjectionMatrix()
+    {
+        return glm::perspectiveFovRH(glm::radians(m_fov), m_screenWidth, m_screenHeight, m_nearClip, m_farClip);
+    }
 
-	glm::mat4 GetInverseProjectionMatrix()
-	{
-		return glm::inverse(GetProjectionMatrix());
-	}
+    glm::mat4 GetInverseProjectionMatrix()
+    {
+        return glm::inverse(GetProjectionMatrix());
+    }
 
-	// Camera Movement Functions
-	void SetClickPosition(float xPos, float yPos)
-	{
-		m_xDelta = xPos;
-		m_yDelta = yPos;
-	}
+    // Camera Movement Functions
+    void SetClickPosition(float xPos, float yPos)
+    {
+        m_xDelta = xPos;
+        m_yDelta = yPos;
+    }
 
-	void SetClickPositionDeta(float xPos, float yPos)
-	{
-		m_xDelta -= xPos;
-		m_yDelta -= yPos;
-	}
+    void SetClickPositionDeta(float xPos, float yPos)
+    {
+        m_xDelta -= xPos;
+        m_yDelta -= yPos;
+    }
 
-	void SetFirstMouseInputState(bool state)
-	{
-		m_cameraFirstMouseInput = state;
-	}
+    void SetFirstMouseInputState(bool state)
+    {
+        m_cameraFirstMouseInput = state;
+    }
 
-	bool GetFirstMouseInputState()
-	{
-		return m_cameraFirstMouseInput;
-	}
+    bool GetFirstMouseInputState()
+    {
+        return m_cameraFirstMouseInput;
+    }
 
-	// Processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
-	void ProcessKeyboard(int direction)
-	{
-		float velocity = m_cameraMouseSensitivity;
-		if (direction == 0) // FORWARD
-			m_position += m_forward * velocity;
-		if (direction == 1) // BACKWARD
-			m_position -= m_forward * velocity;
-		if (direction == 2) // LEFT
-			m_position -= m_right * velocity;
-		if (direction == 3) // RIGHT
-			m_position += m_right * velocity;
-		if (direction == 4) // UP
-			m_position += m_up * velocity;
-		if (direction == 5) // DOWN
-			m_position -= m_up * velocity;
-		if (direction == 6) // YAWLEFT
-		{
-			m_yaw -= 0.5f;
-			UpdateBasisAxis();
-		}
-		if (direction == 7) // YAWRIGHT
-		{
-			m_yaw += 0.5f;
-			UpdateBasisAxis();
-		}
-		if (direction == 8) // PITCHUP
-		{
-			m_pitch += 0.5f;
-			UpdateBasisAxis();
-		}
-		if (direction == 9) // PITCHDOWN
-		{
-			m_pitch -= 0.5f;
-			UpdateBasisAxis();
-		}
-		if (direction == 10) // PITCHDOWN
-		{
-			resetCamera();
-		}
-	}
+    // Processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
+    void ProcessKeyboard(int direction)
+    {
+        float velocity = m_cameraMouseSensitivity;
+        if (direction == 0) // FORWARD
+            m_position += m_forward * velocity;
+        if (direction == 1) // BACKWARD
+            m_position -= m_forward * velocity;
+        if (direction == 2) // LEFT
+            m_position -= m_right * velocity;
+        if (direction == 3) // RIGHT
+            m_position += m_right * velocity;
+        if (direction == 4) // UP
+            m_position += m_up * velocity;
+        if (direction == 5) // DOWN
+            m_position -= m_up * velocity;
+        if (direction == 6) // YAWLEFT
+        {
+            m_yaw -= 0.5f;
+            UpdateBasisAxis();
+        }
+        if (direction == 7) // YAWRIGHT
+        {
+            m_yaw += 0.5f;
+            UpdateBasisAxis();
+        }
+        if (direction == 8) // PITCHUP
+        {
+            m_pitch += 0.5f;
+            UpdateBasisAxis();
+        }
+        if (direction == 9) // PITCHDOWN
+        {
+            m_pitch -= 0.5f;
+            UpdateBasisAxis();
+        }
+        if (direction == 10) // PITCHDOWN
+        {
+            resetCamera();
+        }
+    }
 
-	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
-	void ProcessMouseMovement(bool constrainPitch = true)
-	{
-		m_xDelta *= m_cameraMouseSensitivity;
-		m_yDelta *= m_cameraMouseSensitivity;
+    // Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
+    void ProcessMouseMovement(bool constrainPitch = true)
+    {
+        m_xDelta *= m_cameraMouseSensitivity;
+        m_yDelta *= m_cameraMouseSensitivity;
 
-		m_yaw += m_xDelta;
-		m_pitch += m_yDelta;
+        m_yaw += m_xDelta;
+        m_pitch += m_yDelta;
 
-		// Make sure that when pitch is out of bounds, screen doesn't get flipped
-		if (constrainPitch)
-		{
-			if (m_pitch > 89.0f)
-				m_pitch = 89.0f;
-			if (m_pitch < -89.0f)
-				m_pitch = -89.0f;
-		}
+        // Make sure that when pitch is out of bounds, screen doesn't get flipped
+        if (constrainPitch)
+        {
+            if (m_pitch > 89.0f)
+                m_pitch = 89.0f;
+            if (m_pitch < -89.0f)
+                m_pitch = -89.0f;
+        }
 
-		// Update Front, Right and Up Vectors using the updated Euler angles
-		UpdateBasisAxis();
-	}
+        // Update Front, Right and Up Vectors using the updated Euler angles
+        UpdateBasisAxis();
+    }
 
-	// Calculates the front vector from the Camera's (updated) Euler Angles
-	void UpdateBasisAxis()
-	{
-		// Calculate the new Front vector
-		glm::vec3 front;
-		front.x = cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
-		front.y = sin(glm::radians(m_pitch));
-		front.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
-		m_forward = glm::normalize(front);
-		// Also re-calculate the Right and Up vector
-		m_right = glm::normalize(glm::cross(m_forward, m_worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
-		m_up = glm::normalize(glm::cross(m_right, m_forward));
-	}
+    // Calculates the front vector from the Camera's (updated) Euler Angles
+    void UpdateBasisAxis()
+    {
+        // Calculate the new Front vector
+        glm::vec3 front;
+        front.x = cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+        front.y = sin(glm::radians(m_pitch));
+        front.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+        m_forward = glm::normalize(front);
+        // Also re-calculate the Right and Up vector
+        m_right = glm::normalize(glm::cross(m_forward, m_worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+        m_up = glm::normalize(glm::cross(m_right, m_forward));
+    }
 
-	void resetCamera()
-	{
-		m_position = glm::vec3(0.f, 0.f, 15.f);
-		m_pitch = 0.f;
-		m_yaw = -90.f;
-		UpdateBasisAxis();
-	}
+    void resetCamera()
+    {
+        m_position = glm::vec3(0.f, 0.f, 15.f);
+        m_pitch = 0.f;
+        m_yaw = -90.f;
+        UpdateBasisAxis();
+    }
 };
 static void glfw_error_callback(int error, const char* description)
 {
-	fputs(description, stderr);
+    fputs(description, stderr);
 }
 // Allan MacKinnon's: A tiny example of CUDA + OpenGL interop with write-only surfaces and CUDA kernels.
 // https://gist.github.com/allanmac/4ff11985c3562830989f
 struct cudaglInterop
 {
-	// split GPUs?
-	bool                    multi_gpu;
+    // split GPUs?
+    bool                    multi_gpu;
 
-	// number of fbo's
-	int                     count;
-	int                     index;
+    // number of fbo's
+    int                     count;
+    int                     index;
 
-	// w x h
-	int                     width;
-	int                     height;
+    // w x h
+    int                     width;
+    int                     height;
 
-	// GL buffers
-	GLuint* fb;
-	GLuint* rb;
+    // GL buffers
+    GLuint* fb;
+    GLuint* rb;
 
-	// CUDA resources
-	cudaGraphicsResource_t* cgr;
-	cudaArray_t* ca;
+    // CUDA resources
+    cudaGraphicsResource_t* cgr;
+    cudaArray_t* ca;
 };
 
 cudaError_t cudaglInterop_size_set(struct cudaglInterop* const interop, const int width, const int height)
 {
-	cudaError_t cuda_err = cudaSuccess;
+    cudaError_t cuda_err = cudaSuccess;
 
-	// save new size
-	interop->width = width;
-	interop->height = height;
+    // save new size
+    interop->width = width;
+    interop->height = height;
 
-	// resize color buffer
-	for (int index = 0; index < interop->count; index++)
-	{
-		// unregister resource
-		if (interop->cgr[index] != NULL)
-			cuda_err = cudaGraphicsUnregisterResource(interop->cgr[index]);
+    // resize color buffer
+    for (int index = 0; index < interop->count; index++)
+    {
+        // unregister resource
+        if (interop->cgr[index] != NULL)
+            cuda_err = cudaGraphicsUnregisterResource(interop->cgr[index]);
 
-		// resize rbo
-		glNamedRenderbufferStorage(interop->rb[index], GL_RGBA8, width, height);
+        // resize rbo
+        glNamedRenderbufferStorage(interop->rb[index], GL_RGBA8, width, height);
 
-		// register rbo
-		cuda_err = cudaGraphicsGLRegisterImage(&interop->cgr[index],
-			interop->rb[index],
-			GL_RENDERBUFFER,
-			cudaGraphicsRegisterFlagsSurfaceLoadStore |
-			cudaGraphicsRegisterFlagsWriteDiscard);
-	}
+        // register rbo
+        cuda_err = cudaGraphicsGLRegisterImage(&interop->cgr[index],
+            interop->rb[index],
+            GL_RENDERBUFFER,
+            cudaGraphicsRegisterFlagsSurfaceLoadStore |
+            cudaGraphicsRegisterFlagsWriteDiscard);
+    }
 
-	// map graphics resources
-	cuda_err = cudaGraphicsMapResources(interop->count, interop->cgr, 0);
+    // map graphics resources
+    cuda_err = cudaGraphicsMapResources(interop->count, interop->cgr, 0);
 
-	// get CUDA Array refernces
-	for (int index = 0; index < interop->count; index++)
-	{
-		cuda_err = cudaGraphicsSubResourceGetMappedArray(&interop->ca[index],
-			interop->cgr[index],
-			0, 0);
-	}
+    // get CUDA Array refernces
+    for (int index = 0; index < interop->count; index++)
+    {
+        cuda_err = cudaGraphicsSubResourceGetMappedArray(&interop->ca[index],
+            interop->cgr[index],
+            0, 0);
+    }
 
-	// unmap graphics resources
-	cuda_err = cudaGraphicsUnmapResources(interop->count, interop->cgr, 0);
+    // unmap graphics resources
+    cuda_err = cudaGraphicsUnmapResources(interop->count, interop->cgr, 0);
 
-	return cuda_err;
+    return cuda_err;
 }
 
 
 void pxl_glfw_window_size_callback(GLFWwindow* window, int width, int height)
 {
-	// get context
-	struct cudaglInterop* const interop = (struct cudaglInterop* const) glfwGetWindowUserPointer(window);
+    // get context
+    struct cudaglInterop* const interop = (struct cudaglInterop* const)glfwGetWindowUserPointer(window);
 
-	cudaglInterop_size_set(interop, width, height);
+    cudaglInterop_size_set(interop, width, height);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-struct GLFWViewer 
+struct GLFWViewer
 {
-	GLFWViewer(int windowWidth, int windowHeight)
-		: m_windowWidth(windowWidth), m_windowHeight(windowHeight)
-	{
-		glfwSetErrorCallback(glfw_error_callback);
-		// Init the viewer
-		if (!glfwInit())
-			exit(EXIT_FAILURE);
+    GLFWViewer(int windowWidth, int windowHeight)
+        : m_windowWidth(windowWidth), m_windowHeight(windowHeight)
+    {
+        glfwSetErrorCallback(glfw_error_callback);
+        // Init the viewer
+        if (!glfwInit())
+            exit(EXIT_FAILURE);
 
-		glfwWindowHint(GLFW_DEPTH_BITS, 0);
-		glfwWindowHint(GLFW_STENCIL_BITS, 0);
+        glfwWindowHint(GLFW_DEPTH_BITS, 0);
+        glfwWindowHint(GLFW_STENCIL_BITS, 0);
 
-		glfwWindowHint(GLFW_SRGB_CAPABLE, GL_TRUE);
+        glfwWindowHint(GLFW_SRGB_CAPABLE, GL_TRUE);
 
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-		m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Viewer", NULL, NULL);
-		if (m_window == NULL)
-		{
-			std::cout << "Failed to create GLFW window" << std::endl;
-			glfwTerminate();
-			exit(EXIT_FAILURE);
-			return;
-		}
-		glfwMakeContextCurrent(m_window);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+        m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Viewer", NULL, NULL);
+        if (m_window == NULL)
+        {
+            std::cout << "Failed to create GLFW window" << std::endl;
+            glfwTerminate();
+            exit(EXIT_FAILURE);
+            return;
+        }
+        glfwMakeContextCurrent(m_window);
 
-		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-		{
-			std::cout << "Failed to initialize GLAD" << std::endl;
-			return;
-		}
+        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+        {
+            std::cout << "Failed to initialize GLAD" << std::endl;
+            return;
+        }
 
-		// ignore vsync for now
-		glfwSwapInterval(0);
-		// only copy r/g/b
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+        // ignore vsync for now
+        glfwSwapInterval(0);
+        // only copy r/g/b
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
 
-		InitCUDA();
-	}
+        InitCUDA();
+    }
 
-	void InitCUDA()
-	{
-		int gl_device_id;
-		unsigned int gl_device_count;
-		cuda_err = (cudaGLGetDevices(&gl_device_count, &gl_device_id, 1, cudaGLDeviceListAll));
+    void InitCUDA()
+    {
+        int gl_device_id;
+        unsigned int gl_device_count;
+        cuda_err = (cudaGLGetDevices(&gl_device_count, &gl_device_id, 1, cudaGLDeviceListAll));
 
-		int cuda_device_id = gl_device_id;
-		cuda_err = (cudaSetDevice(cuda_device_id));
+        int cuda_device_id = gl_device_id;
+        cuda_err = (cudaSetDevice(cuda_device_id));
 
-		//
-		// INFO
-		//
-		struct cudaDeviceProp props;
+        //
+        // INFO
+        //
+        struct cudaDeviceProp props;
 
-		cuda_err = (cudaGetDeviceProperties(&props, gl_device_id));
-		printf("GL   : %-24s (%2d)\n", props.name, props.multiProcessorCount);
+        cuda_err = (cudaGetDeviceProperties(&props, gl_device_id));
+        printf("GL   : %-24s (%2d)\n", props.name, props.multiProcessorCount);
 
-		cuda_err = (cudaGetDeviceProperties(&props, cuda_device_id));
-		printf("CUDA : %-24s (%2d)\n", props.name, props.multiProcessorCount);
+        cuda_err = (cudaGetDeviceProperties(&props, cuda_device_id));
+        printf("CUDA : %-24s (%2d)\n", props.name, props.multiProcessorCount);
 
-		//
-		// CREATE CUDA STREAM & EVENT
-		//
+        //
+        // CREATE CUDA STREAM & EVENT
+        //
 
 
-		cuda_err = (cudaStreamCreateWithFlags(&stream, cudaStreamDefault));   // optionally ignore default stream behavior
-		cuda_err = (cudaEventCreateWithFlags(&event, cudaEventBlockingSync)); // | cudaEventDisableTiming);
+        cuda_err = (cudaStreamCreateWithFlags(&stream, cudaStreamDefault));   // optionally ignore default stream behavior
+        cuda_err = (cudaEventCreateWithFlags(&event, cudaEventBlockingSync)); // | cudaEventDisableTiming);
 
-		CreateInterop();
-	}
-	
-	struct cudaglInterop*
-		cudaglInterop_create(const bool multi_gpu, const int fbo_count)
-	{
-		struct cudaglInterop* const interop = (struct cudaglInterop* const)calloc(1, sizeof(*interop));
+        CreateInterop();
+    }
 
-		interop->multi_gpu = multi_gpu;
-		interop->count = fbo_count;
-		interop->index = 0;
+    struct cudaglInterop*
+        cudaglInterop_create(const bool multi_gpu, const int fbo_count)
+    {
+        struct cudaglInterop* const interop = (struct cudaglInterop* const)calloc(1, sizeof(*interop));
 
-		// allocate arrays
-		interop->fb = (GLuint*)calloc(fbo_count, sizeof(*(interop->fb)));
-		interop->rb = (GLuint*)calloc(fbo_count, sizeof(*(interop->rb)));
-		interop->cgr = (cudaGraphicsResource_t*)calloc(fbo_count, sizeof(*(interop->cgr)));
-		interop->ca = (cudaArray_t*)calloc(fbo_count, sizeof(*(interop->ca)));
+        interop->multi_gpu = multi_gpu;
+        interop->count = fbo_count;
+        interop->index = 0;
 
-		// render buffer object w/a color buffer
-		glCreateRenderbuffers(fbo_count, interop->rb);
+        // allocate arrays
+        interop->fb = (GLuint*)calloc(fbo_count, sizeof(*(interop->fb)));
+        interop->rb = (GLuint*)calloc(fbo_count, sizeof(*(interop->rb)));
+        interop->cgr = (cudaGraphicsResource_t*)calloc(fbo_count, sizeof(*(interop->cgr)));
+        interop->ca = (cudaArray_t*)calloc(fbo_count, sizeof(*(interop->ca)));
 
-		// frame buffer object
-		glCreateFramebuffers(fbo_count, interop->fb);
+        // render buffer object w/a color buffer
+        glCreateRenderbuffers(fbo_count, interop->rb);
 
-		// attach rbo to fbo
-		for (int index = 0; index < fbo_count; index++)
-		{
-			glNamedFramebufferRenderbuffer(interop->fb[index],
-				GL_COLOR_ATTACHMENT0,
-				GL_RENDERBUFFER,
-				interop->rb[index]);
-		}
+        // frame buffer object
+        glCreateFramebuffers(fbo_count, interop->fb);
 
-		// return it
-		return interop;
-	}
+        // attach rbo to fbo
+        for (int index = 0; index < fbo_count; index++)
+        {
+            glNamedFramebufferRenderbuffer(interop->fb[index],
+                GL_COLOR_ATTACHMENT0,
+                GL_RENDERBUFFER,
+                interop->rb[index]);
+        }
 
-	void CreateInterop()
-	{
-		//
-		// CREATE INTEROP
-		//
-		// TESTING -- DO NOT SET TO FALSE, ONLY TRUE IS RELIABLE
-		interop = cudaglInterop_create(true /*multi_gpu*/, 2);
+        // return it
+        return interop;
+    }
 
-		//
-		// RESIZE INTEROP
-		//
+    void CreateInterop()
+    {
+        //
+        // CREATE INTEROP
+        //
+        // TESTING -- DO NOT SET TO FALSE, ONLY TRUE IS RELIABLE
+        interop = cudaglInterop_create(true /*multi_gpu*/, 2);
 
-		int width, height;
+        //
+        // RESIZE INTEROP
+        //
 
-		// get initial width/height
-		glfwGetFramebufferSize(m_window, &width, &height);
+        int width, height;
 
-		// resize with initial window dimensions
-		cuda_err = cudaglInterop_size_set(interop, width, height);
+        // get initial width/height
+        glfwGetFramebufferSize(m_window, &width, &height);
 
-		glfwSetWindowUserPointer(m_window, interop);
-		glfwSetFramebufferSizeCallback(m_window, pxl_glfw_window_size_callback);
+        // resize with initial window dimensions
+        cuda_err = cudaglInterop_size_set(interop, width, height);
 
-	}
+        glfwSetWindowUserPointer(m_window, interop);
+        glfwSetFramebufferSizeCallback(m_window, pxl_glfw_window_size_callback);
 
-	~GLFWViewer() 
-	{
-		glfwTerminate();
-		glfwDestroyWindow(m_window);
-	}
+    }
 
-	// This is the quad on the screen that will be used for showing the path traced image
-	int m_windowWidth, m_windowHeight;
-	GLFWwindow* m_window;
+    ~GLFWViewer()
+    {
+        glfwTerminate();
+        glfwDestroyWindow(m_window);
+    }
 
-	cudaStream_t stream;
-	cudaEvent_t  event;
+    // This is the quad on the screen that will be used for showing the path traced image
+    int m_windowWidth, m_windowHeight;
+    GLFWwindow* m_window;
 
-	cudaError_t cuda_err;
+    cudaStream_t stream;
+    cudaEvent_t  event;
 
-	struct cudaglInterop* interop;
+    cudaError_t cuda_err;
+
+    struct cudaglInterop* interop;
 };
 
 // ------------------UTILITY FUNCTIONS------------------
-void LoadMesh(std::string meshFilePath, std::vector<Triangle> &trianglesInMesh)
+void LoadMesh(std::string meshFilePath, std::vector<Triangle>& trianglesInMesh)
 {
-	tinyobj::attrib_t attrib;
-	std::vector<tinyobj::shape_t> shapes;
-	std::vector<tinyobj::material_t> materials;
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
 
-	std::string warn;
-	std::string err;
+    std::string warn;
+    std::string err;
 
-	bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, meshFilePath.c_str());
-	
-	if (!warn.empty())
-	{
-		printf("warn:%s\n", warn.c_str());
-	}
-	
-	if (!err.empty())
-	{
-		printf("err:%s\n", err.c_str());
-	}
+    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, meshFilePath.c_str());
 
-	if (!ret)
-	{
-		printf("Error loading mesh\n");
-		return;
-	}
-	
-	// Loop over shapes
-	for (size_t s = 0; s < shapes.size(); s++) {
-		// Loop over faces(polygon)
-		size_t index_offset = 0;
-		for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
-			int fv = shapes[s].mesh.num_face_vertices[f];
+    if (!warn.empty())
+    {
+        printf("warn:%s\n", warn.c_str());
+    }
 
-			std::vector<glm::vec3> triangleVertices;
-			std::vector<glm::vec2> triangleUVS;
-			std::vector<glm::vec3> triangleNormals;
-			// Loop over vertices in the face.
-			for (size_t v = 0; v < fv; v++) {
-				// access to vertex
-				tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
-				triangleVertices.push_back(glm::vec3(attrib.vertices[3 * idx.vertex_index + 0], attrib.vertices[3 * idx.vertex_index + 1], attrib.vertices[3 * idx.vertex_index + 2]));
-				triangleNormals.push_back(glm::vec3(attrib.normals[3 * idx.normal_index + 0], attrib.normals[3 * idx.normal_index + 1], attrib.normals[3 * idx.normal_index + 2]));
-				if (!attrib.texcoords.empty())
-				{
-					triangleUVS.push_back(glm::vec2(attrib.texcoords[2 * idx.texcoord_index + 0], attrib.texcoords[2 * idx.texcoord_index + 1]));
-				}
-				else
-				{
-					triangleUVS.push_back({ 0.f,0.f });
-				}
-				// Optional: vertex colors
-				// tinyobj::real_t red = attrib.colors[3*idx.vertex_index+0];
-				// tinyobj::real_t green = attrib.colors[3*idx.vertex_index+1];
-				// tinyobj::real_t blue = attrib.colors[3*idx.vertex_index+2];
-			}
-			index_offset += fv;
+    if (!err.empty())
+    {
+        printf("err:%s\n", err.c_str());
+    }
 
-			// loading new trinagle
-			Triangle newTriangle(triangleVertices[0], triangleVertices[1], triangleVertices[2], triangleUVS[0], triangleUVS[1], triangleUVS[2], triangleNormals[0], triangleNormals[1], triangleNormals[2]);
-			trianglesInMesh.push_back(newTriangle);
+    if (!ret)
+    {
+        printf("Error loading mesh\n");
+        return;
+    }
 
-			// per-face material
-			//shapes[s].mesh.material_ids[f];
-		}
-	}
+    // Loop over shapes
+    for (size_t s = 0; s < shapes.size(); s++) {
+        // Loop over faces(polygon)
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+            int fv = shapes[s].mesh.num_face_vertices[f];
+
+            std::vector<glm::vec3> triangleVertices;
+            std::vector<glm::vec2> triangleUVS;
+            std::vector<glm::vec3> triangleNormals;
+            // Loop over vertices in the face.
+            for (size_t v = 0; v < fv; v++) {
+                // access to vertex
+                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+                triangleVertices.push_back(glm::vec3(attrib.vertices[3 * idx.vertex_index + 0], attrib.vertices[3 * idx.vertex_index + 1], attrib.vertices[3 * idx.vertex_index + 2]));
+                triangleNormals.push_back(glm::vec3(attrib.normals[3 * idx.normal_index + 0], attrib.normals[3 * idx.normal_index + 1], attrib.normals[3 * idx.normal_index + 2]));
+                if (!attrib.texcoords.empty())
+                {
+                    triangleUVS.push_back(glm::vec2(attrib.texcoords[2 * idx.texcoord_index + 0], attrib.texcoords[2 * idx.texcoord_index + 1]));
+                }
+                else
+                {
+                    triangleUVS.push_back({ 0.f,0.f });
+                }
+                // Optional: vertex colors
+                // tinyobj::real_t red = attrib.colors[3*idx.vertex_index+0];
+                // tinyobj::real_t green = attrib.colors[3*idx.vertex_index+1];
+                // tinyobj::real_t blue = attrib.colors[3*idx.vertex_index+2];
+            }
+            index_offset += fv;
+
+            // loading new trinagle
+            Triangle newTriangle(triangleVertices[0], triangleVertices[1], triangleVertices[2], triangleUVS[0], triangleUVS[1], triangleUVS[2], triangleNormals[0], triangleNormals[1], triangleNormals[2]);
+            trianglesInMesh.push_back(newTriangle);
+
+            // per-face material
+            //shapes[s].mesh.material_ids[f];
+        }
+    }
 }
 
 void saveToPPM(GLFWViewer* viewer)
 {
-	int width = viewer->interop->width;
-	int height = viewer->interop->height;
-	uchar4* pixels4 = new uchar4[width * height];
+    int width = viewer->interop->width;
+    int height = viewer->interop->height;
+    uchar4* pixels4 = new uchar4[width * height];
 
-	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
-	std::ofstream renderFile;
-	renderFile.open("render.ppm");
-	
-	renderFile << "P3" << std::endl;
-	renderFile << width << " " << height << std::endl;
-	renderFile << 255 << std::endl;
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+    std::ofstream renderFile;
+    renderFile.open("render.ppm");
 
-	for (int i = (width * height) - 1; i >=0; --i)
-	{
-		renderFile << static_cast<int>(pixels4[i].x) << " " << static_cast<int>(pixels4[i].y) << " " << static_cast<int>(pixels4[i].z) << std::endl;
-	}
-	renderFile.close();
-	delete[] pixels4;
+    renderFile << "P3" << std::endl;
+    renderFile << width << " " << height << std::endl;
+    renderFile << 255 << std::endl;
+
+    for (int i = (width * height) - 1; i >= 0; --i)
+    {
+        renderFile << static_cast<int>(pixels4[i].x) << " " << static_cast<int>(pixels4[i].y) << " " << static_cast<int>(pixels4[i].z) << std::endl;
+    }
+    renderFile.close();
+    delete[] pixels4;
 }
 
 void saveToPNG(GLFWViewer* viewer, int iterations, int maxDepth, int spp, std::string algoString)
 {
-	int width = viewer->interop->width;
-	int height = viewer->interop->height;
-	uchar4* pixels4 = new uchar4[width * height];
+    int width = viewer->interop->width;
+    int height = viewer->interop->height;
+    uchar4* pixels4 = new uchar4[width * height];
 
-	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
 
-	stbi_flip_vertically_on_write(1);
-	
-	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter_"+algoString+".png";
+    stbi_flip_vertically_on_write(1);
 
-	stbi_write_png(pathname.c_str(), width, height, 4, pixels4, width * 4);
-	
+    std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter_" + algoString + ".png";
+
+    stbi_write_png(pathname.c_str(), width, height, 4, pixels4, width * 4);
+
 }
 
 void saveToHDR(GLFWViewer* viewer, int iterations, int maxDepth, int spp, std::string algoString)
 {
-	int width = viewer->interop->width;
-	int height = viewer->interop->height;
-	uchar4* pixels4 = new uchar4[width * height];
+    int width = viewer->interop->width;
+    int height = viewer->interop->height;
+    uchar4* pixels4 = new uchar4[width * height];
 
-	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
 
-	stbi_flip_vertically_on_write(1);
+    stbi_flip_vertically_on_write(1);
 
-	std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter_" + algoString + ".hdr";
+    std::string pathname = "render_" + std::to_string(spp) + "spp_" + std::to_string(maxDepth) + "depth_" + std::to_string(iterations) + "iter_" + algoString + ".hdr";
 
-	float* hdrPixels = new float[4 * width * height];
-	for (int i = 0; i < width * height * 4; i += 4)
-	{
-		hdrPixels[i] = pixels4[i / 4].x / 255.f;
-		hdrPixels[i + 1] = pixels4[i / 4].y / 255.f;
-		hdrPixels[i + 2] = pixels4[i / 4].z / 255.f;
-		hdrPixels[i + 3] = pixels4[i / 4].w / 255.f;
-	}
-	stbi_write_hdr(pathname.c_str(), width, height, 4, hdrPixels);
-	delete[] hdrPixels;
+    float* hdrPixels = new float[4 * width * height];
+    for (int i = 0; i < width * height * 4; i += 4)
+    {
+        hdrPixels[i] = pixels4[i / 4].x / 255.f;
+        hdrPixels[i + 1] = pixels4[i / 4].y / 255.f;
+        hdrPixels[i + 2] = pixels4[i / 4].z / 255.f;
+        hdrPixels[i + 3] = pixels4[i / 4].w / 255.f;
+    }
+    stbi_write_hdr(pathname.c_str(), width, height, 4, hdrPixels);
+    delete[] hdrPixels;
 
 }
 
 void saveToIMAGE(GLFWViewer* viewer)
 {
-	int width = viewer->interop->width;
-	int height = viewer->interop->height;
-	uchar4* pixels4 = new uchar4[width * height];
+    int width = viewer->interop->width;
+    int height = viewer->interop->height;
+    uchar4* pixels4 = new uchar4[width * height];
 
-	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
-	
-	CFileDialog FileDlg(FALSE, NULL, "render", OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_ENABLESIZING , "Image files (*.png, *.jpg, *.jpeg, *.tga, *.bmp, *.hdr) | *.png; *.jpg; *.jpeg; *.tga; *.bmp; *.hdr||");
-	std::string pathName;
-	std::string fileExtension;
-	if (FileDlg.DoModal() != IDOK)
-	{
-		return;
-	}
-	fileExtension = FileDlg.GetFileExt();
-	pathName = FileDlg.GetPathName();
-	stbi_flip_vertically_on_write(1);
-	if(!fileExtension.compare("png") || !fileExtension.compare(""))
-	{
-		if (!fileExtension.compare(""))
-		{
-			pathName += ".png";
-		}
-		stbi_write_png(pathName.c_str(), width, height, 4, pixels4, width * 4);
-	}
-	else if (!fileExtension.compare("hdr"))
-	{
-		float* hdrPixels = new float[4 * width * height];
-		for (int i = 0; i < width * height * 4; i += 4)
-		{
-			hdrPixels[i] = pixels4[i / 4].x / 255.f;
-			hdrPixels[i + 1] = pixels4[i / 4].y / 255.f;
-			hdrPixels[i + 2] = pixels4[i / 4].z / 255.f;
-			hdrPixels[i + 3] = pixels4[i / 4].w / 255.f;
-		}
-		stbi_write_hdr(pathName.c_str(), width, height, 4, hdrPixels);
-		delete[] hdrPixels;
-	}
-	else if (!fileExtension.compare("jpg") || !fileExtension.compare("jpeg"))
-	{
-		stbi_write_jpg(pathName.c_str(), width, height, 4, pixels4, 85);
-	}
-	else if (!fileExtension.compare("tga") )
-	{
-		stbi_write_tga(pathName.c_str(), width, height, 4, pixels4);
-	}
-	else if (!fileExtension.compare("bmp") )
-	{
-		stbi_write_bmp(pathName.c_str(), width, height, 4, pixels4);
-	}
-	delete[] pixels4;
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels4);
+
+    CFileDialog FileDlg(FALSE, NULL, "render", OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT | OFN_ENABLESIZING, "Image files (*.png, *.jpg, *.jpeg, *.tga, *.bmp, *.hdr) | *.png; *.jpg; *.jpeg; *.tga; *.bmp; *.hdr||");
+    std::string pathName;
+    std::string fileExtension;
+    if (FileDlg.DoModal() != IDOK)
+    {
+        return;
+    }
+    fileExtension = FileDlg.GetFileExt();
+    pathName = FileDlg.GetPathName();
+    stbi_flip_vertically_on_write(1);
+    if (!fileExtension.compare("png") || !fileExtension.compare(""))
+    {
+        if (!fileExtension.compare(""))
+        {
+            pathName += ".png";
+        }
+        stbi_write_png(pathName.c_str(), width, height, 4, pixels4, width * 4);
+    }
+    else if (!fileExtension.compare("hdr"))
+    {
+        float* hdrPixels = new float[4 * width * height];
+        for (int i = 0; i < width * height * 4; i += 4)
+        {
+            hdrPixels[i] = pixels4[i / 4].x / 255.f;
+            hdrPixels[i + 1] = pixels4[i / 4].y / 255.f;
+            hdrPixels[i + 2] = pixels4[i / 4].z / 255.f;
+            hdrPixels[i + 3] = pixels4[i / 4].w / 255.f;
+        }
+        stbi_write_hdr(pathName.c_str(), width, height, 4, hdrPixels);
+        delete[] hdrPixels;
+    }
+    else if (!fileExtension.compare("jpg") || !fileExtension.compare("jpeg"))
+    {
+        stbi_write_jpg(pathName.c_str(), width, height, 4, pixels4, 85);
+    }
+    else if (!fileExtension.compare("tga"))
+    {
+        stbi_write_tga(pathName.c_str(), width, height, 4, pixels4);
+    }
+    else if (!fileExtension.compare("bmp"))
+    {
+        stbi_write_bmp(pathName.c_str(), width, height, 4, pixels4);
+    }
+    delete[] pixels4;
 }
 
 int GetTotalPrimitiveCount(std::vector<Geometry> geometries) {
-	int primitiveCount= -1;
-	for (auto geometry : geometries) {
-		primitiveCount += (geometry.m_numberOfTriangles == 0) ? 1 : geometry.m_numberOfTriangles;
-	}
-	return primitiveCount;
+    int primitiveCount = -1;
+    for (auto geometry : geometries) {
+        primitiveCount += (geometry.m_numberOfTriangles == 0) ? 1 : geometry.m_numberOfTriangles;
+    }
+    return primitiveCount;
 }
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) 
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	glViewport(0, 0, width, height);
+    glViewport(0, 0, width, height);
 }
 
 void processInput(GLFWwindow* window, Camera& camera, GLFWViewer* viewer, int& iteration, float& time)
 {
-	bool cameraMoved = false;
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, true);
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(0);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(1);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(2);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(3);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(4);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(5);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(6);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(7);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(8);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(9);
-		cameraMoved = true;
-	}
-	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-	{
-		camera.ProcessKeyboard(10);
-		cameraMoved = true;
-	}
-	if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
-	{
-		//saveToPPM(viewer);
-		saveToIMAGE(viewer);
-	}
+    bool cameraMoved = false;
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(0);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(1);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(2);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(3);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(4);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(5);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(6);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(7);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(8);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(9);
+        cameraMoved = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+    {
+        camera.ProcessKeyboard(10);
+        cameraMoved = true;
+    }
+    if ((glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) && glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
+    {
+        //saveToPPM(viewer);
+        saveToIMAGE(viewer);
+    }
 
-	// if the camera moved, then we need to clear our framebuffer and reset the iteration and time
-	if (cameraMoved)
-	{
-		const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
-		iteration = 1;
-		time = 0.f;
-	}
+    // if the camera moved, then we need to clear our framebuffer and reset the iteration and time
+    if (cameraMoved)
+    {
+        const GLfloat clear_color[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        glClearNamedFramebufferfv(viewer->interop->fb[viewer->interop->index], GL_COLOR, 0, clear_color);
+        iteration = 1;
+        time = 0.f;
+    }
 }

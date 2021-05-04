@@ -10,179 +10,179 @@ surface<void, cudaSurfaceType2D> surf;
 
 __device__ inline bool intersectPlane(const Geometry& plane, const Ray& ray, Intersect& intersect)
 {
-	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-	float denom = glm::dot(plane.m_normal, ray.m_direction);
-	if (fabsf(denom) > RAY_EPSILON)
-	{
-		glm::vec3 p0l0 = -ray.m_origin;
-		float t = glm::dot(p0l0, plane.m_normal) / denom;
-		glm::vec3 P = ray.m_origin + t * ray.m_direction;
-		// check bounds of the plane centered at 0,0,0 in object space
-		if (!(P.x >= -0.5f && P.x <= 0.5f && P.y >= -0.5f && P.y <= 0.5f))
-		{
-			return false;
-		}
-	
-		if (t > 0.0f) {
-			intersect.m_t = t;
-			intersect.m_intersectionPoint = P;
-			intersect.m_normal = plane.m_normal;
-			return true;
-		}
-		return false;
-	}
-	return false;
+    // CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+    float denom = glm::dot(plane.m_normal, ray.m_direction);
+    if (fabsf(denom) > RAY_EPSILON)
+    {
+        glm::vec3 p0l0 = -ray.m_origin;
+        float t = glm::dot(p0l0, plane.m_normal) / denom;
+        glm::vec3 P = ray.m_origin + t * ray.m_direction;
+        // check bounds of the plane centered at 0,0,0 in object space
+        if (!(P.x >= -0.5f && P.x <= 0.5f && P.y >= -0.5f && P.y <= 0.5f))
+        {
+            return false;
+        }
+
+        if (t > 0.0f) {
+            intersect.m_t = t;
+            intersect.m_intersectionPoint = P;
+            intersect.m_normal = plane.m_normal;
+            return true;
+        }
+        return false;
+    }
+    return false;
 }
 
 // fast Triangle intersection : https://cadxfem.org/inf/Fast%20MinimumStorage%20RayTriangle%20Intersection.pdf
 __device__ inline  bool intersectTriangle(const Triangle& triangle, const Ray& ray, Intersect& intersect)
 {
-	// CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
-	const float EPSILON = RAY_EPSILON;
-	glm::vec3 vertex0 = triangle.m_v0;
-	glm::vec3 pvec, tvec, qvec;
-	float det, invDet, u, v;
+    // CLARIFICATION: all the rays need to be in object space; convert the ray to world space elsewhere
+    const float EPSILON = RAY_EPSILON;
+    glm::vec3 vertex0 = triangle.m_v0;
+    glm::vec3 pvec, tvec, qvec;
+    float det, invDet, u, v;
 
-	pvec = glm::cross(ray.m_direction, triangle.edge1);
-	det = glm::dot(triangle.edge0, pvec);
+    pvec = glm::cross(ray.m_direction, triangle.edge1);
+    det = glm::dot(triangle.edge0, pvec);
 
-	// NO BACKFACE CULLING
-	if (det < EPSILON && det > -EPSILON) 
-	{
-		return false;    // This ray is parallel to this triangle.
-	}
-	invDet = 1.f / det;
-	tvec = ray.m_origin - vertex0;
-	u = invDet * glm::dot(tvec, pvec);
+    // NO BACKFACE CULLING
+    if (det < EPSILON && det > -EPSILON)
+    {
+        return false;    // This ray is parallel to this triangle.
+    }
+    invDet = 1.f / det;
+    tvec = ray.m_origin - vertex0;
+    u = invDet * glm::dot(tvec, pvec);
 
-	if (u < 0.0f || u > 1.f)
-	{
-		return false;
-	}
+    if (u < 0.0f || u > 1.f)
+    {
+        return false;
+    }
 
-	qvec = glm::cross(tvec, triangle.edge0);
+    qvec = glm::cross(tvec, triangle.edge0);
 
-	v = invDet * glm::dot(ray.m_direction, qvec);
-	if (v < 0.0f || u + v > 1.f)
-	{
-		return false;
-	}
+    v = invDet * glm::dot(ray.m_direction, qvec);
+    if (v < 0.0f || u + v > 1.f)
+    {
+        return false;
+    }
 
-	float t = invDet * glm::dot(triangle.edge1, qvec);
+    float t = invDet * glm::dot(triangle.edge1, qvec);
 
-	if (t > EPSILON) // ray intersection
-	{
-		glm::vec3 intersectPoint = ray.m_origin + ray.m_direction * t;
-		intersect.m_intersectionPoint = intersectPoint;
-		intersect.m_t = t;
+    if (t > EPSILON) // ray intersection
+    {
+        glm::vec3 intersectPoint = ray.m_origin + ray.m_direction * t;
+        intersect.m_intersectionPoint = intersectPoint;
+        intersect.m_t = t;
 
-		// Calculate the normal using barycentric coordinates
-		glm::vec3 edge2 = intersectPoint - vertex0;
-		float d20 = glm::dot(edge2, triangle.edge0);
-		float d21 = glm::dot(edge2, triangle.edge1);
-		float v = (triangle.d11 * d20 - triangle.d01 * d21) * triangle.invDenom;
-		float w = (triangle.d00 * d21 - triangle.d01 * d20) * triangle.invDenom;
-		float u = 1.0f - v - w;
-		intersect.m_normal = glm::normalize((u * triangle.m_n0) + (v * triangle.m_n1) + (w * triangle.m_n2));
+        // Calculate the normal using barycentric coordinates
+        glm::vec3 edge2 = intersectPoint - vertex0;
+        float d20 = glm::dot(edge2, triangle.edge0);
+        float d21 = glm::dot(edge2, triangle.edge1);
+        float v = (triangle.d11 * d20 - triangle.d01 * d21) * triangle.invDenom;
+        float w = (triangle.d00 * d21 - triangle.d01 * d20) * triangle.invDenom;
+        float u = 1.0f - v - w;
+        intersect.m_normal = glm::normalize((u * triangle.m_n0) + (v * triangle.m_n1) + (w * triangle.m_n2));
 
-		return true;
-	}
-	else // This means that there is a line intersection but not a ray intersection.
-	{
-		return false;
-	}
+        return true;
+    }
+    else // This means that there is a line intersection but not a ray intersection.
+    {
+        return false;
+    }
 }
 
-__device__ inline  bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 modelMatrix,const Ray& ray)
+__device__ inline  bool setIntersection(float& tMax, Intersect& intersectOut, const Intersect& objectSpaceIntersect, glm::mat4 modelMatrix, const Ray& ray)
 {
-	// convert point of intersection into world space
-	glm::vec3 worldPOI = modelMatrix * glm::vec4(objectSpaceIntersect.m_intersectionPoint, 1.0f);
-	float distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
-	if (distanceOfPOI < tMax)
-	{
-		// right now we are storing the object space normal. Later on we calculate the world space normal.
-		intersectOut.m_normal = objectSpaceIntersect.m_normal;
-		// This is the world space point of intersection
-		intersectOut.m_intersectionPoint = worldPOI;
-		intersectOut.m_t = distanceOfPOI;
-		tMax = distanceOfPOI;
-		return true;
-	}
-	return false;
+    // convert point of intersection into world space
+    glm::vec3 worldPOI = modelMatrix * glm::vec4(objectSpaceIntersect.m_intersectionPoint, 1.0f);
+    float distanceOfPOI = glm::distance(worldPOI, ray.m_origin);
+    if (distanceOfPOI < tMax)
+    {
+        // right now we are storing the object space normal. Later on we calculate the world space normal.
+        intersectOut.m_normal = objectSpaceIntersect.m_normal;
+        // This is the world space point of intersection
+        intersectOut.m_intersectionPoint = worldPOI;
+        intersectOut.m_t = distanceOfPOI;
+        tMax = distanceOfPOI;
+        return true;
+    }
+    return false;
 }
 
 __device__ inline  bool intersectRays(const Ray& ray, Geometry* geometries, unsigned int raytracableObjects, Intersect& intersectOut)
 {
-	// This is the global intersect that stores the intersect info in world space
-	bool objectHit = false;
-	float tMax = CUDART_INF_F;
-	// loop through all geometries, find the smallest "t" value for a single ray
-	for (int i = 0; i < raytracableObjects; ++i)
-	{
-		Geometry& geometry = geometries[i];
+    // This is the global intersect that stores the intersect info in world space
+    bool objectHit = false;
+    float tMax = CUDART_INF_F;
+    // loop through all geometries, find the smallest "t" value for a single ray
+    for (int i = 0; i < raytracableObjects; ++i)
+    {
+        Geometry& geometry = geometries[i];
 
-		// Generate the ray in the object space of the geometry being intersected.
-		const Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f));
+        // Generate the ray in the object space of the geometry being intersected.
+        const Ray& objectSpaceRay = Ray(geometry.m_inverseModelMatrix * glm::vec4(ray.m_origin, 1.f), geometry.m_inverseModelMatrix * glm::vec4(ray.m_direction, 0.f));
 
-		// This intersect is re-created each iteration and stores the intersect info in object space of the geometry
-		Intersect objectSpaceIntersect;
+        // This intersect is re-created each iteration and stores the intersect info in object space of the geometry
+        Intersect objectSpaceIntersect;
 
-		if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
-		{
-			for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
-			{
+        if (geometry.m_geometryType == GeometryType::TRIANGLEMESH)
+        {
+            for (int j = 0; j < geometry.m_numberOfTriangles; ++j)
+            {
 
-				if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
-				{
-					if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray)) 
-					{
-						objectHit = true;
-						intersectOut.geometryIndex = i;
-						intersectOut.triangleIndex = j;
-					}
-				}
-			}
-		}
-		else if (geometry.m_geometryType == GeometryType::PLANE)
-		{
-			if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
-			{
-				if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray)) 
-				{
-					objectHit = true;
-					// we store the geometry index so that we can access its BXDF later on
-					intersectOut.geometryIndex = i;
-				}
-			}
-		}
-		else if (geometry.m_geometryType == GeometryType::SPHERE)
-		{
-			printf("Sphere Geometry implemented yet!");
-			return false;
-		}
-		else
-		{
-			printf("No such Geometry implemented yet!");
-			return false;
-		}
-	}
+                if (intersectTriangle(geometry.m_triangles[j], objectSpaceRay, objectSpaceIntersect))
+                {
+                    if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray))
+                    {
+                        objectHit = true;
+                        intersectOut.geometryIndex = i;
+                        intersectOut.triangleIndex = j;
+                    }
+                }
+            }
+        }
+        else if (geometry.m_geometryType == GeometryType::PLANE)
+        {
+            if (intersectPlane(geometry, objectSpaceRay, objectSpaceIntersect))
+            {
+                if (setIntersection(tMax, intersectOut, objectSpaceIntersect, geometry.m_modelMatrix, ray))
+                {
+                    objectHit = true;
+                    // we store the geometry index so that we can access its BXDF later on
+                    intersectOut.geometryIndex = i;
+                }
+            }
+        }
+        else if (geometry.m_geometryType == GeometryType::SPHERE)
+        {
+            printf("Sphere Geometry implemented yet!");
+            return false;
+        }
+        else
+        {
+            printf("No such Geometry implemented yet!");
+            return false;
+        }
+    }
 
-	// do matrix multiplication only once for calculating world space normal.
-	// Instead of calculating a world space normal everytime a new tMax is found, do it only once at the end 
-	if (objectHit)
-	{
-		intersectOut.m_normal = glm::normalize(glm::vec3(geometries[intersectOut.geometryIndex].m_invTransModelMatrix * glm::vec4(intersectOut.m_normal, 0.f)));
-	}
-	return objectHit;
+    // do matrix multiplication only once for calculating world space normal.
+    // Instead of calculating a world space normal everytime a new tMax is found, do it only once at the end 
+    if (objectHit)
+    {
+        intersectOut.m_normal = glm::normalize(glm::vec3(geometries[intersectOut.geometryIndex].m_invTransModelMatrix * glm::vec4(intersectOut.m_normal, 0.f)));
+    }
+    return objectHit;
 }
 
 /**
  * @brief A helper function to call sampleBsdf of the intersected geometry.
-	Same input/output parameters as BXDF::sampleBsdf. See utilities.h
+    Same input/output parameters as BXDF::sampleBsdf. See utilities.h
 */
 __device__ inline  glm::vec3 getBXDF(const Ray& outgoingRay, Intersect& intersect, glm::vec3& incomingRayDirection, Geometry* geometries, float& pdf, int depth, bool& isSpecular)
 {
-	return (geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), incomingRayDirection, intersect, pdf, depth, isSpecular));
+    return (geometries[intersect.geometryIndex].m_bxdf->sampleBsdf((-outgoingRay.m_direction), incomingRayDirection, intersect, pdf, depth, isSpecular));
 }
 
 /**
@@ -194,40 +194,40 @@ __device__ inline  glm::vec3 getBXDF(const Ray& outgoingRay, Intersect& intersec
 */
 __device__ inline  bool generateRay(Camera camera, int x, int y, Ray& ray)
 {
-	// TODO: add depth of field
-	ray.m_origin = camera.m_position;
+    // TODO: add depth of field
+    ray.m_origin = camera.m_position;
 
-	curandState state1;
+    curandState state1;
 
-	curand_init((unsigned long long)clock() + x, x, 0, &state1);
-	float jx = curand_uniform(&state1);
-	float jy = curand_uniform(&state1);
+    curand_init((unsigned long long)clock() + x, x, 0, &state1);
+    float jx = curand_uniform(&state1);
+    float jy = curand_uniform(&state1);
 
-	// Stratified sample
-	float Px = ((x + jx) / camera.m_screenWidth) * 2.f - 1.f;
-	float Py = 1.f - ((y + jy) / camera.m_screenHeight) * 2.f;
+    // Stratified sample
+    float Px = ((x + jx) / camera.m_screenWidth) * 2.f - 1.f;
+    float Py = 1.f - ((y + jy) / camera.m_screenHeight) * 2.f;
 
-	glm::vec3 wLookAtPoint = camera.m_invViewProj * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
+    glm::vec3 wLookAtPoint = camera.m_invViewProj * (glm::vec4(Px, Py, 1.f, 1.f) * camera.m_farClip);
 
-	ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
-	return true;
+    ray.m_direction = glm::normalize(wLookAtPoint - ray.m_origin);
+    return true;
 }
 
 /**
- * @brief Each frame calls this kernel to trace rays into the scene. 
- *		  Each calls this kernel width*height times to fill the renderbuffer.
- *		  This kernel calculates the radiance generated by "totalSamplesPerPixel" number of rays at a pixel x,y.
- *		  This radiance calculated is filled into the CUDA surface object which is bound to the renderbuffer before kernel invocation.
+ * @brief Each frame calls this kernel to trace rays into the scene.
+ *        Each calls this kernel width*height times to fill the renderbuffer.
+ *        This kernel calculates the radiance generated by "totalSamplesPerPixel" number of rays at a pixel x,y.
+ *        This radiance calculated is filled into the CUDA surface object which is bound to the renderbuffer before kernel invocation.
  * @param geometries (INPUT): a simple array of geometries present in the scene.
  * @param lights (INPUT): a simple array of the indices at which lights are present in the geometries array.
  * @param camera (INPUT): the camera object that contains the location, forward, up, near/far clip etc to generate the starting ray to be traced
- * @param numberOfGeometries (INPUT): the total geometries present in the scene and the array "geometries". 
- *									  Since CUDA doesn't take in std::vector, we need to manually send the size of geometries
- * @param numberOfLights (INPUT): the total lights present in the scene and the array "lights". 
- *									  Since CUDA doesn't take in std::vector, we need to manually send the size of lights
+ * @param numberOfGeometries (INPUT): the total geometries present in the scene and the array "geometries".
+ *                                    Since CUDA doesn't take in std::vector, we need to manually send the size of geometries
+ * @param numberOfLights (INPUT): the total lights present in the scene and the array "lights".
+ *                                    Since CUDA doesn't take in std::vector, we need to manually send the size of lights
  * @param iteration (INPUT): the current iteration. Used to average out the renderbuffer radiance (RGB) value.
- * @param maxDepth (INPUT): the maximum depth a ray is allowed to reach before terminating. 
- *							In complex scenes with lot of non-diffuse bsdfs, this needs to be high enough. But beware, the higher the maxDepth, the longer a path takes 
+ * @param maxDepth (INPUT): the maximum depth a ray is allowed to reach before terminating.
+ *                          In complex scenes with lot of non-diffuse bsdfs, this needs to be high enough. But beware, the higher the maxDepth, the longer a path takes
  * @param totalSamplesPerPixel (INPUT): to do anti aliasing. Shoots totalSamplesPerPixel for each kernel call to calculate radiance at pixel location.
  * @param d_pixelColor (INOUT): a device buffer to store radiance over iterations
  * @return : Fills the surface pointer that is bound to a certain (either FRONT or BACK) renderbuffer. This will be displayed by the framebuffer eventually
@@ -237,688 +237,688 @@ __device__ inline  bool generateRay(Camera camera, int x, int y, Ray& ray)
 // http://www.cs.uu.nl/docs/vakken/magr/portfolio/INFOMAGR/lecture8.pdf
 
 __global__ void launchPathTrace(
-	Geometry* geometries, 
-	unsigned int* lights,
-	Camera camera, 
-	int numberOfGeometries, 
-	int numberOfLights,
-	int iteration,
-	int maxDepth,
-	int totalSamplesPerPixel,
-	glm::vec3* d_pixelColor)
+    Geometry* geometries,
+    unsigned int* lights,
+    Camera camera,
+    int numberOfGeometries,
+    int numberOfLights,
+    int iteration,
+    int maxDepth,
+    int totalSamplesPerPixel,
+    glm::vec3* d_pixelColor)
 {
 #ifdef PIXEL_DEBUG
-	int x = 550;
-	int y = 605;
+    int x = 550;
+    int y = 605;
 
 #else
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
 #endif
-	int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
-	int pixelIndex = y * camera.m_screenWidth + x;
+    int pixelSize = camera.m_screenHeight * camera.m_screenWidth;
+    int pixelIndex = y * camera.m_screenWidth + x;
 
-	if (pixelIndex >= pixelSize)
-	{
-		return;
-	}
-	// Do Light transport here
-	// Loop over total number of samples to be shot per pixel (gives us anti aliasing)
-	//   A. Loop until we hit max depth or russian roulette termination
-	//		1. Check if we hit a light
-	//		  1.a if we hit light, then terminate if the last material was not specular since we accumulate lights contribution during every non-specular bounce (NEE)
-	//			1.a.i if the last material was specular, then add emitter's contribution since specular materials cannot add NEE contribution. (This is because specular materials will bend the ray of light in only one possible direction)
-	//		2. Check what material we hit
-	//		  2.a get bsdf and pdf
-	//		  2.b get next ray (incoming)
-	//		  2.c calculate thruput and calculate russian roulette
-	//		  2.d if the current hit material is not specular, we can calculate the next event estimation's (NEE) approximation. See here for more details: http://www.cs.uu.nl/docs/vakken/magr/portfolio/INFOMAGR/lecture8.pdf
-	//			2.d.i we sample a point on a randomly selected light (which we later average out)
-	//			2.d.ii we then calculate the cosine of the angles between this shadow ray (intersectionPointOnSurface, randomSampleOnLight - intersectionPointOnSurface) and the normal on the lights surface and the normal on the point of intersection
-	//			2.d.iii we then trace this shadow ray, and if there are no obstructions between the light and the point of intersection, we calculate the solid angle of the light on to the point of intersection on the object
-	//			2.d.iv We then add on the light's contribution on to the radiance being carried along the ray 
-	//		  2.d Go back to A
+    if (pixelIndex >= pixelSize)
+    {
+        return;
+    }
+    // Do Light transport here
+    // Loop over total number of samples to be shot per pixel (gives us anti aliasing)
+    //   A. Loop until we hit max depth or russian roulette termination
+    //      1. Check if we hit a light
+    //        1.a if we hit light, then terminate if the last material was not specular since we accumulate lights contribution during every non-specular bounce (NEE)
+    //          1.a.i if the last material was specular, then add emitter's contribution since specular materials cannot add NEE contribution. (This is because specular materials will bend the ray of light in only one possible direction)
+    //      2. Check what material we hit
+    //        2.a get bsdf and pdf
+    //        2.b get next ray (incoming)
+    //        2.c calculate thruput and calculate russian roulette
+    //        2.d if the current hit material is not specular, we can calculate the next event estimation's (NEE) approximation. See here for more details: http://www.cs.uu.nl/docs/vakken/magr/portfolio/INFOMAGR/lecture8.pdf
+    //          2.d.i we sample a point on a randomly selected light (which we later average out)
+    //          2.d.ii we then calculate the cosine of the angles between this shadow ray (intersectionPointOnSurface, randomSampleOnLight - intersectionPointOnSurface) and the normal on the lights surface and the normal on the point of intersection
+    //          2.d.iii we then trace this shadow ray, and if there are no obstructions between the light and the point of intersection, we calculate the solid angle of the light on to the point of intersection on the object
+    //          2.d.iv We then add on the light's contribution on to the radiance being carried along the ray 
+    //        2.d Go back to A
 
-	// This is where we will store the final radiance that will be converted to RGB
-	// to be stored and displayed by the render buffer
-	glm::vec3 finalPixelColor(0.f);
+    // This is where we will store the final radiance that will be converted to RGB
+    // to be stored and displayed by the render buffer
+    glm::vec3 finalPixelColor(0.f);
 
-	// when we begin tracing rays, we need to clear & reset the render buffer (done outside this kernel)
-	// and clear and reset the device buffer we use for accumulation.
-	// This happens every time iteration is 1.
-	if (iteration == 1)
-	{
-		d_pixelColor[pixelIndex] = glm::vec3(0.f);
-	}
+    // when we begin tracing rays, we need to clear & reset the render buffer (done outside this kernel)
+    // and clear and reset the device buffer we use for accumulation.
+    // This happens every time iteration is 1.
+    if (iteration == 1)
+    {
+        d_pixelColor[pixelIndex] = glm::vec3(0.f);
+    }
 
-	finalPixelColor.x = d_pixelColor[pixelIndex].x;
-	finalPixelColor.y = d_pixelColor[pixelIndex].y;
-	finalPixelColor.z = d_pixelColor[pixelIndex].z;
+    finalPixelColor.x = d_pixelColor[pixelIndex].x;
+    finalPixelColor.y = d_pixelColor[pixelIndex].y;
+    finalPixelColor.z = d_pixelColor[pixelIndex].z;
 
-	int samplesPerPixel = 1;
-	glm::vec3 pixelColorPerPixel(0.f);
+    int samplesPerPixel = 1;
+    glm::vec3 pixelColorPerPixel(0.f);
 #define MIS
-//#define NEE
+    //#define NEE
 #ifdef MIS
-	while(samplesPerPixel <= totalSamplesPerPixel)
-	{
-		Ray outgoingRay;
-		generateRay(camera, x, y, outgoingRay);
-		glm::vec3 pixelColorPerSample(0.f);
-		int depth = 0;
-		glm::vec3 thruput(1.f);
-		float emissionWeight = 1.f;
-		bool lastSpecular = false;
-		Intersect intersect;
-		bool intersected = true;
-		do
-		{
-			if( depth == 0)
-			{
-				intersected = intersectRays(outgoingRay, geometries, numberOfGeometries, intersect);
-			}
-			if (!intersected )
-			{
-				break;
-			}
-			else
-			{
-				Ray incomingRay;
-				incomingRay.m_origin = intersect.m_intersectionPoint;
+    while (samplesPerPixel <= totalSamplesPerPixel)
+    {
+        Ray outgoingRay;
+        generateRay(camera, x, y, outgoingRay);
+        glm::vec3 pixelColorPerSample(0.f);
+        int depth = 0;
+        glm::vec3 thruput(1.f);
+        float emissionWeight = 1.f;
+        bool lastSpecular = false;
+        Intersect intersect;
+        bool intersected = true;
+        do
+        {
+            if (depth == 0)
+            {
+                intersected = intersectRays(outgoingRay, geometries, numberOfGeometries, intersect);
+            }
+            if (!intersected)
+            {
+                break;
+            }
+            else
+            {
+                Ray incomingRay;
+                incomingRay.m_origin = intersect.m_intersectionPoint;
 
-				float pdf;
-				// getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
-				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
-				
-				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-				{
-					// add to thruput and exit since we hit an emitter
-					pixelColorPerSample += thruput * bxdf * emissionWeight;
-					break;
-				}
-			
-				if (!lastSpecular)
-				{
-					// MIS: we didn't hit a light, so we sample a point on a randomly selected light and sample the BSDF
-					curandState state1;
-					curandState state2;
+                float pdf;
+                // getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
+                glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
 
-					curand_init((unsigned long long)clock() + x, x, 0, &state1);
-					unsigned int lightIdx = curand_uniform(&state1) * numberOfLights;
+                if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+                {
+                    // add to thruput and exit since we hit an emitter
+                    pixelColorPerSample += thruput * bxdf * emissionWeight;
+                    break;
+                }
+
+                if (!lastSpecular)
+                {
+                    // MIS: we didn't hit a light, so we sample a point on a randomly selected light and sample the BSDF
+                    curandState state1;
+                    curandState state2;
+
+                    curand_init((unsigned long long)clock() + x, x, 0, &state1);
+                    unsigned int lightIdx = curand_uniform(&state1) * numberOfLights;
 
 
-					curand_init((unsigned long long)clock() + y, y, 0, &state2);
-					glm::vec2 sample(curand_uniform(&state1), curand_uniform(&state1));
+                    curand_init((unsigned long long)clock() + y, y, 0, &state2);
+                    glm::vec2 sample(curand_uniform(&state1), curand_uniform(&state1));
 
-					glm::vec3 Ld(0.f);
+                    glm::vec3 Ld(0.f);
 
-					//--------------------------------------------- sample light with MIS ---------------------------------------------
-					float lightPdf = 0, scatteringPdf = 0;
+                    //--------------------------------------------- sample light with MIS ---------------------------------------------
+                    float lightPdf = 0, scatteringPdf = 0;
 
-					Intersect randomLightIntersect;
-					geometries[lights[lightIdx]].sampleLight(sample, randomLightIntersect);
+                    Intersect randomLightIntersect;
+                    geometries[lights[lightIdx]].sampleLight(sample, randomLightIntersect);
 
-					glm::vec3 shadowRayDirection = randomLightIntersect.m_intersectionPoint - intersect.m_intersectionPoint;
-					float lengthSquared = glm::length(shadowRayDirection);
-					lengthSquared *= lengthSquared;
-					shadowRayDirection = glm::normalize(shadowRayDirection);
-					float cosT = glm::dot(intersect.m_normal, shadowRayDirection);
+                    glm::vec3 shadowRayDirection = randomLightIntersect.m_intersectionPoint - intersect.m_intersectionPoint;
+                    float lengthSquared = glm::length(shadowRayDirection);
+                    lengthSquared *= lengthSquared;
+                    shadowRayDirection = glm::normalize(shadowRayDirection);
+                    float cosT = glm::dot(intersect.m_normal, shadowRayDirection);
 
-					glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
-					if(cosT>0.f)
-					{						
-						Ray shadowRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, shadowRayDirection);
+                    glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
+                    if (cosT > 0.f)
+                    {
+                        Ray shadowRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, shadowRayDirection);
 
-						if (intersectRays(shadowRay, geometries, numberOfGeometries, randomLightIntersect))
-						{
-							if (randomLightIntersect.geometryIndex == lights[lightIdx] && geometries[randomLightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-							{
-								float cosP = glm::dot(-shadowRay.m_direction, randomLightIntersect.m_normal);
-								lightPdf = lengthSquared / (fabsf(cosP) * geometries[randomLightIntersect.geometryIndex].m_surfaceArea);
-								glm::vec3 bxdfFromLightSample = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRay.m_direction, intersect);
-								scatteringPdf = geometries[intersect.geometryIndex].m_bxdf->pdf(-outgoingRay.m_direction, shadowRay.m_direction, intersect);
+                        if (intersectRays(shadowRay, geometries, numberOfGeometries, randomLightIntersect))
+                        {
+                            if (randomLightIntersect.geometryIndex == lights[lightIdx] && geometries[randomLightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+                            {
+                                float cosP = glm::dot(-shadowRay.m_direction, randomLightIntersect.m_normal);
+                                lightPdf = lengthSquared / (fabsf(cosP) * geometries[randomLightIntersect.geometryIndex].m_surfaceArea);
+                                glm::vec3 bxdfFromLightSample = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRay.m_direction, intersect);
+                                scatteringPdf = geometries[intersect.geometryIndex].m_bxdf->pdf(-outgoingRay.m_direction, shadowRay.m_direction, intersect);
 
-								glm::vec3 lightBxdf = cosP > 0.f ? geometries[randomLightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[randomLightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
+                                glm::vec3 lightBxdf = cosP > 0.f ? geometries[randomLightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[randomLightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
 
-								float weight = (lightPdf * lightPdf) / (lightPdf * lightPdf + scatteringPdf * scatteringPdf);
-								pixelColorPerSample += bxdfFromLightSample * lightBxdf * weight * thruput / lightPdf;
-							}
-						}
-					}
-					//--------------------------------------------- end Light MIS ---------------------------------------------
-					glm::vec3 bsdfSampleDirection = incomingRay.m_direction;
-					//--------------------------------------------- Sample BSDF with MIS ---------------------------------------------
-					if (!isBlack(bxdf) && pdf > 0.f)
-					{
-						thruput *= bxdf;
-						Intersect lightIsect;
-						Ray bsdfMISRay(glm::dot(bsdfSampleDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, bsdfSampleDirection);
-						
-						intersected = intersectRays(bsdfMISRay, geometries, numberOfGeometries, lightIsect);
-						if (intersected && lightIsect.geometryIndex == lights[lightIdx] && geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-						{
-							lengthSquared = glm::length(lightIsect.m_intersectionPoint - intersect.m_intersectionPoint);
-							lengthSquared *= lengthSquared;
-							lightPdf = lengthSquared / (fabsf(glm::dot(-bsdfMISRay.m_direction, lightIsect.m_normal)) * geometries[lightIsect.geometryIndex].m_surfaceArea);
-							emissionWeight = (pdf * pdf) / (lightPdf * lightPdf + pdf * pdf);
-						}
-						else if (intersected && (geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::MIRROR || geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::GLASS))
-						{
-							lastSpecular = true;
-						}
-							
-						outgoingRay = bsdfMISRay;
-						intersect = lightIsect;
-					}
-					else
-					{
-						break;
-					}
-					//--------------------------------------------- end BSDF MIS ---------------------------------------------
-				}
-				else
-				{
-					// set the next ray for tracing
-					glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
-					incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
-					
-					outgoingRay = incomingRay;
-					thruput *= bxdf;
-					intersected = intersectRays(outgoingRay, geometries, numberOfGeometries, intersect);
-				}
-				
-				if (depth > 3)
-				{
-					curandState state;
-					curand_init((unsigned long long)clock() + x, x, 0, &state);
-					float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
-					if (curand_uniform(&state) < q)
-						break;
-					thruput /= 1.f - q;
-				}
-			}
-			depth++;
-		} while (depth < maxDepth);
+                                float weight = (lightPdf * lightPdf) / (lightPdf * lightPdf + scatteringPdf * scatteringPdf);
+                                pixelColorPerSample += bxdfFromLightSample * lightBxdf * weight * thruput / lightPdf;
+                            }
+                        }
+                    }
+                    //--------------------------------------------- end Light MIS ---------------------------------------------
+                    glm::vec3 bsdfSampleDirection = incomingRay.m_direction;
+                    //--------------------------------------------- Sample BSDF with MIS ---------------------------------------------
+                    if (!isBlack(bxdf) && pdf > 0.f)
+                    {
+                        thruput *= bxdf;
+                        Intersect lightIsect;
+                        Ray bsdfMISRay(glm::dot(bsdfSampleDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, bsdfSampleDirection);
 
-		pixelColorPerPixel += pixelColorPerSample;
-		
-		samplesPerPixel++;
-	}
+                        intersected = intersectRays(bsdfMISRay, geometries, numberOfGeometries, lightIsect);
+                        if (intersected && lightIsect.geometryIndex == lights[lightIdx] && geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+                        {
+                            lengthSquared = glm::length(lightIsect.m_intersectionPoint - intersect.m_intersectionPoint);
+                            lengthSquared *= lengthSquared;
+                            lightPdf = lengthSquared / (fabsf(glm::dot(-bsdfMISRay.m_direction, lightIsect.m_normal)) * geometries[lightIsect.geometryIndex].m_surfaceArea);
+                            emissionWeight = (pdf * pdf) / (lightPdf * lightPdf + pdf * pdf);
+                        }
+                        else if (intersected && (geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::MIRROR || geometries[lightIsect.geometryIndex].m_bxdf->m_type == BXDFTyp::GLASS))
+                        {
+                            lastSpecular = true;
+                        }
+
+                        outgoingRay = bsdfMISRay;
+                        intersect = lightIsect;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                    //--------------------------------------------- end BSDF MIS ---------------------------------------------
+                }
+                else
+                {
+                    // set the next ray for tracing
+                    glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
+                    incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+
+                    outgoingRay = incomingRay;
+                    thruput *= bxdf;
+                    intersected = intersectRays(outgoingRay, geometries, numberOfGeometries, intersect);
+                }
+
+                if (depth > 3)
+                {
+                    curandState state;
+                    curand_init((unsigned long long)clock() + x, x, 0, &state);
+                    float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
+                    if (curand_uniform(&state) < q)
+                        break;
+                    thruput /= 1.f - q;
+                }
+            }
+            depth++;
+        } while (depth < maxDepth);
+
+        pixelColorPerPixel += pixelColorPerSample;
+
+        samplesPerPixel++;
+    }
 #endif
 #ifdef NEE
-	while (samplesPerPixel <= totalSamplesPerPixel)
-	{
-		Ray outgoingRay;
-		generateRay(camera, x, y, outgoingRay);
-		glm::vec3 pixelColorPerSample(0.f);
-		int depth = 0;
-		glm::vec3 thruput(1.f);
+    while (samplesPerPixel <= totalSamplesPerPixel)
+    {
+        Ray outgoingRay;
+        generateRay(camera, x, y, outgoingRay);
+        glm::vec3 pixelColorPerSample(0.f);
+        int depth = 0;
+        glm::vec3 thruput(1.f);
 
-		bool lastSpecular = false;
+        bool lastSpecular = false;
 
-		do
-		{
-			Intersect intersect;
-			if (!intersectRays(outgoingRay, geometries, numberOfGeometries, intersect))
-			{
-				break;
-			}
-			else
-			{
-				Ray incomingRay;
-				incomingRay.m_origin = intersect.m_intersectionPoint;
+        do
+        {
+            Intersect intersect;
+            if (!intersectRays(outgoingRay, geometries, numberOfGeometries, intersect))
+            {
+                break;
+            }
+            else
+            {
+                Ray incomingRay;
+                incomingRay.m_origin = intersect.m_intersectionPoint;
 
-				float pdf;
-				// getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
-				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
+                float pdf;
+                // getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
+                glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
 
-				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-				{
-					if (depth > 0 && !lastSpecular)
-					{
-						break;
-					}
-					// add to thruput and exit since we hit an emitter
-					pixelColorPerSample += thruput * bxdf;
-					break;
-				}
+                if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+                {
+                    if (depth > 0 && !lastSpecular)
+                    {
+                        break;
+                    }
+                    // add to thruput and exit since we hit an emitter
+                    pixelColorPerSample += thruput * bxdf;
+                    break;
+                }
 
-				if (!lastSpecular)
-				{
-					// NEE: we didn't hit a light, so we sample a point on a randomly selected light
-					curandState state1;
-					curandState state2;
+                if (!lastSpecular)
+                {
+                    // NEE: we didn't hit a light, so we sample a point on a randomly selected light
+                    curandState state1;
+                    curandState state2;
 
-					curand_init((unsigned long long)clock() + x, x, 0, &state1);
-					unsigned int lightIdx = curand_uniform(&state1) * numberOfLights;
+                    curand_init((unsigned long long)clock() + x, x, 0, &state1);
+                    unsigned int lightIdx = curand_uniform(&state1) * numberOfLights;
 
 
-					curand_init((unsigned long long)clock() + y, y, 0, &state2);
-					glm::vec2 sample(curand_uniform(&state1), curand_uniform(&state1));
+                    curand_init((unsigned long long)clock() + y, y, 0, &state2);
+                    glm::vec2 sample(curand_uniform(&state1), curand_uniform(&state1));
 
-					Intersect randomLightIntersect;
-					geometries[lights[lightIdx]].sampleLight(sample, randomLightIntersect);
+                    Intersect randomLightIntersect;
+                    geometries[lights[lightIdx]].sampleLight(sample, randomLightIntersect);
 
-					glm::vec3 shadowRayDirection = randomLightIntersect.m_intersectionPoint - intersect.m_intersectionPoint;
+                    glm::vec3 shadowRayDirection = randomLightIntersect.m_intersectionPoint - intersect.m_intersectionPoint;
 
-					float lengthSquared = glm::length(shadowRayDirection);
-					lengthSquared *= lengthSquared;
-					shadowRayDirection = glm::normalize(shadowRayDirection);
-					float cosT = glm::dot(intersect.m_normal, shadowRayDirection);
+                    float lengthSquared = glm::length(shadowRayDirection);
+                    lengthSquared *= lengthSquared;
+                    shadowRayDirection = glm::normalize(shadowRayDirection);
+                    float cosT = glm::dot(intersect.m_normal, shadowRayDirection);
 
-					if (cosT > 0.f)
-					{
-						glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
-						Ray shadowRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, shadowRayDirection);
+                    if (cosT > 0.f)
+                    {
+                        glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
+                        Ray shadowRay(glm::dot(shadowRayDirection, originOffset) > 0 ? intersect.m_intersectionPoint + originOffset : intersect.m_intersectionPoint - originOffset, shadowRayDirection);
 
-						if (intersectRays(shadowRay, geometries, numberOfGeometries, randomLightIntersect))
-						{
-							if (randomLightIntersect.geometryIndex == lights[lightIdx] && geometries[randomLightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-							{
-								float cosP = glm::dot(-shadowRayDirection, randomLightIntersect.m_normal);
-								glm::vec3 bxdfSample = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRayDirection, intersect);
-								glm::vec3 lightBxdf = cosP > 0.f ? geometries[randomLightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[randomLightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
-								float oneOverLightPDF = cosP * geometries[randomLightIntersect.geometryIndex].m_surfaceArea / lengthSquared;
-								glm::vec3 directLighting = static_cast<float>(numberOfLights) * lightBxdf * bxdfSample * oneOverLightPDF;
-								pixelColorPerSample += directLighting * thruput;
-							}
-						}
-					}
-				}
-				if (pdf <= RAY_EPSILON)
-				{
-					break;
-				}
-				thruput *= bxdf;
+                        if (intersectRays(shadowRay, geometries, numberOfGeometries, randomLightIntersect))
+                        {
+                            if (randomLightIntersect.geometryIndex == lights[lightIdx] && geometries[randomLightIntersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+                            {
+                                float cosP = glm::dot(-shadowRayDirection, randomLightIntersect.m_normal);
+                                glm::vec3 bxdfSample = geometries[intersect.geometryIndex].m_bxdf->f(-outgoingRay.m_direction, shadowRayDirection, intersect);
+                                glm::vec3 lightBxdf = cosP > 0.f ? geometries[randomLightIntersect.geometryIndex].m_bxdf->m_emissiveColor * geometries[randomLightIntersect.geometryIndex].m_bxdf->m_intensity : glm::vec3(0.f);
+                                float oneOverLightPDF = cosP * geometries[randomLightIntersect.geometryIndex].m_surfaceArea / lengthSquared;
+                                glm::vec3 directLighting = static_cast<float>(numberOfLights) * lightBxdf * bxdfSample * oneOverLightPDF;
+                                pixelColorPerSample += directLighting * thruput;
+                            }
+                        }
+                    }
+                }
+                if (pdf <= RAY_EPSILON)
+                {
+                    break;
+                }
+                thruput *= bxdf;
 
-				// set the next ray for tracing
-				glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
-				incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+                // set the next ray for tracing
+                glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
+                incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
 
-				outgoingRay = incomingRay;
+                outgoingRay = incomingRay;
 
-				if (depth > 3)
-				{
-					curandState state;
-					curand_init((unsigned long long)clock() + x, x, 0, &state);
-					float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
-					if (curand_uniform(&state) < q)
-						break;
-					thruput /= 1.f - q;
-				}
-			}
-			depth++;
-		} while (depth < maxDepth);
+                if (depth > 3)
+                {
+                    curandState state;
+                    curand_init((unsigned long long)clock() + x, x, 0, &state);
+                    float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
+                    if (curand_uniform(&state) < q)
+                        break;
+                    thruput /= 1.f - q;
+                }
+            }
+            depth++;
+        } while (depth < maxDepth);
 
-		pixelColorPerPixel += pixelColorPerSample;
+        pixelColorPerPixel += pixelColorPerSample;
 
-		samplesPerPixel++;
-	}
+        samplesPerPixel++;
+    }
 #else
-	while (samplesPerPixel <= totalSamplesPerPixel)
-	{
-		Ray outgoingRay;
-		generateRay(camera, x, y, outgoingRay);
-		glm::vec3 pixelColorPerSample(0.f);
-		int depth = 0;
-		glm::vec3 thruput(1.f);
+    while (samplesPerPixel <= totalSamplesPerPixel)
+    {
+        Ray outgoingRay;
+        generateRay(camera, x, y, outgoingRay);
+        glm::vec3 pixelColorPerSample(0.f);
+        int depth = 0;
+        glm::vec3 thruput(1.f);
 
-		bool lastSpecular = false;
+        bool lastSpecular = false;
 
-		do
-		{
-			Intersect intersect;
-			if (!intersectRays(outgoingRay, geometries, numberOfGeometries, intersect))
-			{
-				break;
-			}
-			else
-			{
-				Ray incomingRay;
-				incomingRay.m_origin = intersect.m_intersectionPoint;
+        do
+        {
+            Intersect intersect;
+            if (!intersectRays(outgoingRay, geometries, numberOfGeometries, intersect))
+            {
+                break;
+            }
+            else
+            {
+                Ray incomingRay;
+                incomingRay.m_origin = intersect.m_intersectionPoint;
 
-				float pdf;
-				// getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
-				glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
+                float pdf;
+                // getBXDF returns 4 things: the bsdf, pdf of that bsdf sample, the new sampled direction, and if the bxdf is specular
+                glm::vec3 bxdf = getBXDF(outgoingRay, intersect, incomingRay.m_direction, geometries, pdf, depth, lastSpecular);
 
-				if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
-				{
-					pixelColorPerSample += thruput * bxdf;
-					break;
-				}
+                if (geometries[intersect.geometryIndex].m_bxdf->m_type == BXDFTyp::EMITTER)
+                {
+                    pixelColorPerSample += thruput * bxdf;
+                    break;
+                }
 
-				if (pdf <= RAY_EPSILON)
-				{
-					break;
-				}
-				thruput *= bxdf;
-				// set the next ray for tracing
-				glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
-				incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
+                if (pdf <= RAY_EPSILON)
+                {
+                    break;
+                }
+                thruput *= bxdf;
+                // set the next ray for tracing
+                glm::vec3 originOffset = RAY_EPSILON * intersect.m_normal;
+                incomingRay.m_origin += glm::dot(incomingRay.m_direction, originOffset) > 0 ? originOffset : -originOffset;
 
-				outgoingRay = incomingRay;
-				if (depth > 3)
-				{
-					curandState state;
-					curand_init((unsigned long long)clock() + x, x, 0, &state);
-					float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
-					if (curand_uniform(&state) < q)
-						break;
-					thruput /= 1.f - q;
-				}
-			}
-			depth++;
-		} while (depth < maxDepth);
+                outgoingRay = incomingRay;
+                if (depth > 3)
+                {
+                    curandState state;
+                    curand_init((unsigned long long)clock() + x, x, 0, &state);
+                    float q = fmaxf(.05f, 1.f - fmaxf(thruput[0], fmaxf(thruput[1], thruput[2])));
+                    if (curand_uniform(&state) < q)
+                        break;
+                    thruput /= 1.f - q;
+                }
+            }
+            depth++;
+        } while (depth < maxDepth);
 
-		pixelColorPerPixel += pixelColorPerSample;
+        pixelColorPerPixel += pixelColorPerSample;
 
-		samplesPerPixel++;
-	}
+        samplesPerPixel++;
+    }
 #endif
-	pixelColorPerPixel /= totalSamplesPerPixel;
-	finalPixelColor += pixelColorPerPixel;
-	
-	d_pixelColor[pixelIndex] = finalPixelColor;
-	finalPixelColor /= iteration;
+    pixelColorPerPixel /= totalSamplesPerPixel;
+    finalPixelColor += pixelColorPerPixel;
 
-	// clamp the final rgb color [0, 1]
-	finalPixelColor = glm::clamp(finalPixelColor, glm::vec3(0.f), glm::vec3(1.f));
-	
-	// write the color value to the pixel location x,y
-	surf2Dwrite(make_uchar4(finalPixelColor[0] * 255, finalPixelColor[1] * 255, finalPixelColor[2] * 255, 255),
-		surf,
-		x * sizeof(uchar4),
-		y,
-		cudaBoundaryModeZero);
+    d_pixelColor[pixelIndex] = finalPixelColor;
+    finalPixelColor /= iteration;
+
+    // clamp the final rgb color [0, 1]
+    finalPixelColor = glm::clamp(finalPixelColor, glm::vec3(0.f), glm::vec3(1.f));
+
+    // write the color value to the pixel location x,y
+    surf2Dwrite(make_uchar4(finalPixelColor[0] * 255, finalPixelColor[1] * 255, finalPixelColor[2] * 255, 255),
+        surf,
+        x * sizeof(uchar4),
+        y,
+        cudaBoundaryModeZero);
 }
 
 cudaError_t launchPathTraceKernel(
-	cudaArray_const_t array,
-	const int         width,
-	const int         height,
-	cudaEvent_t       event,
-	cudaStream_t      stream,
-	Geometry* geom,
-	unsigned int* lights,
-	Camera camera,
-	int numGeom,
-	int numLights,
-	int iteration,
-	int maxDepth,
-	int samplesPerPixel,
-	glm::vec3* d_pixelColor)
+    cudaArray_const_t array,
+    const int         width,
+    const int         height,
+    cudaEvent_t       event,
+    cudaStream_t      stream,
+    Geometry* geom,
+    unsigned int* lights,
+    Camera camera,
+    int numGeom,
+    int numLights,
+    int iteration,
+    int maxDepth,
+    int samplesPerPixel,
+    glm::vec3* d_pixelColor)
 {
-	cudaError_t cuda_err;
+    cudaError_t cuda_err;
 
-	cuda_err = cudaBindSurfaceToArray(surf, array);
+    cuda_err = cudaBindSurfaceToArray(surf, array);
 
-	if (cuda_err)
-	{
-		return cuda_err;
-	}
+    if (cuda_err)
+    {
+        return cuda_err;
+    }
 
-	dim3 blockSize(16, 16, 1);
-	dim3 gridSize;
-	gridSize.x = ((width + blockSize.x - 1) / blockSize.x);
-	gridSize.y = ((height + blockSize.y -1) / blockSize.y);
-	
+    dim3 blockSize(16, 16, 1);
+    dim3 gridSize;
+    gridSize.x = ((width + blockSize.x - 1) / blockSize.x);
+    gridSize.y = ((height + blockSize.y - 1) / blockSize.y);
+
 #ifdef PIXEL_DEBUG
-	launchPathTrace << <1, 1, 0, stream >> > (geom, lights, camera, numGeom, numLights, iteration, maxDepth, samplesPerPixel, d_pixelColor);
+    launchPathTrace << <1, 1, 0, stream >> > (geom, lights, camera, numGeom, numLights, iteration, maxDepth, samplesPerPixel, d_pixelColor);
 #else
-	launchPathTrace << <gridSize, blockSize, 0, stream >> > (geom, lights, camera, numGeom, numLights, iteration, maxDepth, samplesPerPixel, d_pixelColor);
+    launchPathTrace << <gridSize, blockSize, 0, stream >> > (geom, lights, camera, numGeom, numLights, iteration, maxDepth, samplesPerPixel, d_pixelColor);
 #endif
-	return cudaSuccess;
+    return cudaSuccess;
 }
 
 int main()
 {
-	PathTracerState state;
+    PathTracerState state;
 
-	std::vector<Triangle> trianglesInMesh;
-	LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
-	Geometry sphereglassMeshGeometry	("sphere glass",GeometryType::TRIANGLEMESH, glm::vec3(3.5f, -5.5f, 1.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
-	Geometry spheremirrorMeshGeometry	("sphere mirror", GeometryType::TRIANGLEMESH, glm::vec3(-3.5f, -5.5f, -2.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
-	std::vector<Triangle> trianglesInOtherMesh;
-	LoadMesh(R"(..\..\sceneResources\wahoo.obj)", trianglesInOtherMesh);
-	Geometry wahooglassMeshGeometry		("wahoo", GeometryType::TRIANGLEMESH, glm::vec3(0.f, -7.f, 0.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f), trianglesInOtherMesh);
-	Geometry topPlaneLightGeometry		("ceiling light", GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(7.5f, 5.f, 5.f));
-	Geometry leftPlaneLightGeometry		("left light", GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
-	Geometry bottomPlaneWhiteGeometry	("floor", GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(-90.f, 0.f, 0.f), glm::vec3(15.f));
-	Geometry topPlaneWhiteGeometry		("ceiling", GeometryType::PLANE, glm::vec3(0.f, 7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
-	Geometry backPlaneWhiteGeometry		("back plane", GeometryType::PLANE, glm::vec3(0.f, 0.f, -7.5f), glm::vec3(0.f), glm::vec3(15.f));
-	Geometry leftPlaneRedGeometry		("red wall", GeometryType::PLANE, glm::vec3(-7.5f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(15.f));
-	Geometry rightPlaneGreenGeometry	("green wall", GeometryType::PLANE, glm::vec3(7.5f, 0.f, 0.f), glm::vec3(0.f, -90.f, 0.f), glm::vec3(15.f));
+    std::vector<Triangle> trianglesInMesh;
+    LoadMesh(R"(..\..\sceneResources\sphere.obj)", trianglesInMesh);
+    Geometry sphereglassMeshGeometry("sphere glass", GeometryType::TRIANGLEMESH, glm::vec3(3.5f, -5.5f, 1.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
+    Geometry spheremirrorMeshGeometry("sphere mirror", GeometryType::TRIANGLEMESH, glm::vec3(-3.5f, -5.5f, -2.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.f), trianglesInMesh);
+    std::vector<Triangle> trianglesInOtherMesh;
+    LoadMesh(R"(..\..\sceneResources\wahoo.obj)", trianglesInOtherMesh);
+    Geometry wahooglassMeshGeometry("wahoo", GeometryType::TRIANGLEMESH, glm::vec3(0.f, -7.f, 0.f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f), trianglesInOtherMesh);
+    Geometry topPlaneLightGeometry("ceiling light", GeometryType::PLANE, glm::vec3(0.f, 7.499f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(7.5f, 5.f, 5.f));
+    Geometry leftPlaneLightGeometry("left light", GeometryType::PLANE, glm::vec3(-5.f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(5.f));
+    Geometry bottomPlaneWhiteGeometry("floor", GeometryType::PLANE, glm::vec3(0.f, -7.5f, 0.f), glm::vec3(-90.f, 0.f, 0.f), glm::vec3(15.f));
+    Geometry topPlaneWhiteGeometry("ceiling", GeometryType::PLANE, glm::vec3(0.f, 7.5f, 0.f), glm::vec3(90.f, 0.f, 0.f), glm::vec3(15.f));
+    Geometry backPlaneWhiteGeometry("back plane", GeometryType::PLANE, glm::vec3(0.f, 0.f, -7.5f), glm::vec3(0.f), glm::vec3(15.f));
+    Geometry leftPlaneRedGeometry("red wall", GeometryType::PLANE, glm::vec3(-7.5f, 0.f, 0.f), glm::vec3(0.f, 90.f, 0.f), glm::vec3(15.f));
+    Geometry rightPlaneGreenGeometry("green wall", GeometryType::PLANE, glm::vec3(7.5f, 0.f, 0.f), glm::vec3(0.f, -90.f, 0.f), glm::vec3(15.f));
 
 
-	BXDF diffusebxdfREDMesh;
-	diffusebxdfREDMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfREDMesh.m_albedo = { 1.f, 0.f, 0.f };
+    BXDF diffusebxdfREDMesh;
+    diffusebxdfREDMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfREDMesh.m_albedo = { 1.f, 0.f, 0.f };
 
-	BXDF diffusebxdfLIGHTREDMesh;
-	diffusebxdfLIGHTREDMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfLIGHTREDMesh.m_albedo = { 0.725f, 0.431f, 0.451f };
+    BXDF diffusebxdfLIGHTREDMesh;
+    diffusebxdfLIGHTREDMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfLIGHTREDMesh.m_albedo = { 0.725f, 0.431f, 0.451f };
 
-	BXDF diffusebxdfGREENMesh;
-	diffusebxdfGREENMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfGREENMesh.m_albedo = { 0.f, 1.f, 0.f };
+    BXDF diffusebxdfGREENMesh;
+    diffusebxdfGREENMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfGREENMesh.m_albedo = { 0.f, 1.f, 0.f };
 
-	BXDF diffusebxdfBLUEMesh;
-	diffusebxdfBLUEMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfBLUEMesh.m_albedo = { 0.f, 0.f, 1.f };
+    BXDF diffusebxdfBLUEMesh;
+    diffusebxdfBLUEMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfBLUEMesh.m_albedo = { 0.f, 0.f, 1.f };
 
-	BXDF diffusebxdfLIGHTBLUEMesh;
-	diffusebxdfLIGHTBLUEMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfLIGHTBLUEMesh.m_albedo = { 0.471f, 0.412f, 0.706f };
+    BXDF diffusebxdfLIGHTBLUEMesh;
+    diffusebxdfLIGHTBLUEMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfLIGHTBLUEMesh.m_albedo = { 0.471f, 0.412f, 0.706f };
 
-	BXDF diffusebxdfPURPLEMesh;
-	diffusebxdfPURPLEMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfPURPLEMesh.m_albedo = { 1.f, 0.f, 1.f };
+    BXDF diffusebxdfPURPLEMesh;
+    diffusebxdfPURPLEMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfPURPLEMesh.m_albedo = { 1.f, 0.f, 1.f };
 
-	BXDF diffusebxdfWHITEMesh;
-	diffusebxdfWHITEMesh.m_type = BXDFTyp::DIFFUSE;
-	diffusebxdfWHITEMesh.m_albedo = { 1.f, 1.f, 1.f };
+    BXDF diffusebxdfWHITEMesh;
+    diffusebxdfWHITEMesh.m_type = BXDFTyp::DIFFUSE;
+    diffusebxdfWHITEMesh.m_albedo = { 1.f, 1.f, 1.f };
 
-	BXDF lightbxdfPlane;
-	lightbxdfPlane.m_type = BXDFTyp::EMITTER;
-	lightbxdfPlane.m_intensity = 3.f;
-	lightbxdfPlane.m_emissiveColor = { 1.f, 1.f, 1.f };
+    BXDF lightbxdfPlane;
+    lightbxdfPlane.m_type = BXDFTyp::EMITTER;
+    lightbxdfPlane.m_intensity = 3.f;
+    lightbxdfPlane.m_emissiveColor = { 1.f, 1.f, 1.f };
 
-	BXDF mirrorbxdfWHITEMesh;
-	mirrorbxdfWHITEMesh.m_type = BXDFTyp::MIRROR;
-	mirrorbxdfWHITEMesh.m_refractiveIndex = 1.5f;
-	mirrorbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
+    BXDF mirrorbxdfWHITEMesh;
+    mirrorbxdfWHITEMesh.m_type = BXDFTyp::MIRROR;
+    mirrorbxdfWHITEMesh.m_refractiveIndex = 1.5f;
+    mirrorbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
 
-	BXDF glassbxdfWHITEMesh;
-	glassbxdfWHITEMesh.m_type = BXDFTyp::GLASS;
-	glassbxdfWHITEMesh.m_refractiveIndex = 1.5f;
-	glassbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
-	glassbxdfWHITEMesh.m_transmittanceColor = { 1.f, 1.f, 1.f };
+    BXDF glassbxdfWHITEMesh;
+    glassbxdfWHITEMesh.m_type = BXDFTyp::GLASS;
+    glassbxdfWHITEMesh.m_refractiveIndex = 1.5f;
+    glassbxdfWHITEMesh.m_specularColor = { 1.f, 1.f, 1.f };
+    glassbxdfWHITEMesh.m_transmittanceColor = { 1.f, 1.f, 1.f };
 
-	sphereglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
-	spheremirrorMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
-	wahooglassMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
-	bottomPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
-	backPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
-	topPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
-	leftPlaneRedGeometry.m_bxdf		= &diffusebxdfLIGHTREDMesh;
-	rightPlaneGreenGeometry.m_bxdf	= &diffusebxdfLIGHTBLUEMesh;
-	topPlaneLightGeometry.m_bxdf	= &lightbxdfPlane;
-	leftPlaneLightGeometry.m_bxdf	= &lightbxdfPlane;
-	
-	std::vector<Geometry> geometries;
-	geometries.push_back(sphereglassMeshGeometry);
-	geometries.push_back(spheremirrorMeshGeometry);
-	//geometries.push_back(wahooglassMeshGeometry);
-	geometries.push_back(topPlaneLightGeometry);
-	//geometries.push_back(leftPlaneLightGeometry);
-	geometries.push_back(bottomPlaneWhiteGeometry);
-	geometries.push_back(backPlaneWhiteGeometry);
-	geometries.push_back(topPlaneWhiteGeometry);
-	geometries.push_back(rightPlaneGreenGeometry);
-	geometries.push_back(leftPlaneRedGeometry);
+    sphereglassMeshGeometry.m_bxdf = &glassbxdfWHITEMesh;
+    spheremirrorMeshGeometry.m_bxdf = &mirrorbxdfWHITEMesh;
+    wahooglassMeshGeometry.m_bxdf = &mirrorbxdfWHITEMesh;
+    bottomPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
+    backPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
+    topPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
+    leftPlaneRedGeometry.m_bxdf = &diffusebxdfLIGHTREDMesh;
+    rightPlaneGreenGeometry.m_bxdf = &diffusebxdfLIGHTBLUEMesh;
+    topPlaneLightGeometry.m_bxdf = &lightbxdfPlane;
+    leftPlaneLightGeometry.m_bxdf = &lightbxdfPlane;
 
-	std::vector<unsigned int> lights;
-	for (unsigned int i = 0; i < geometries.size(); ++i)
-	{
-		if (geometries[i].m_bxdf->m_type == BXDFTyp::EMITTER)
-		{
-			lights.push_back(i);
-		}
-	}
+    std::vector<Geometry> geometries;
+    geometries.push_back(sphereglassMeshGeometry);
+    geometries.push_back(spheremirrorMeshGeometry);
+    //geometries.push_back(wahooglassMeshGeometry);
+    geometries.push_back(topPlaneLightGeometry);
+    //geometries.push_back(leftPlaneLightGeometry);
+    geometries.push_back(bottomPlaneWhiteGeometry);
+    geometries.push_back(backPlaneWhiteGeometry);
+    geometries.push_back(topPlaneWhiteGeometry);
+    geometries.push_back(rightPlaneGreenGeometry);
+    geometries.push_back(leftPlaneRedGeometry);
 
-	// First we will copy the base geometry object to device memory
-	unsigned int* d_lights = nullptr;
-	cudaMalloc((void**)&(d_lights), sizeof(unsigned int) * lights.size());
-	cudaCheckErrors("cudaMalloc lights fail");
-	cudaMemcpy(d_lights, lights.data(), sizeof(unsigned int) * lights.size(), cudaMemcpyHostToDevice);
-	cudaCheckErrors("cudaMemcpy lights fail");
+    std::vector<unsigned int> lights;
+    for (unsigned int i = 0; i < geometries.size(); ++i)
+    {
+        if (geometries[i].m_bxdf->m_type == BXDFTyp::EMITTER)
+        {
+            lights.push_back(i);
+        }
+    }
 
-	// TODO: Load scene from file
-	int windowWidth  = 800;
-	int windowHeight = 800;
+    // First we will copy the base geometry object to device memory
+    unsigned int* d_lights = nullptr;
+    cudaMalloc((void**)&(d_lights), sizeof(unsigned int) * lights.size());
+    cudaCheckErrors("cudaMalloc lights fail");
+    cudaMemcpy(d_lights, lights.data(), sizeof(unsigned int) * lights.size(), cudaMemcpyHostToDevice);
+    cudaCheckErrors("cudaMemcpy lights fail");
 
-	// First we will copy the base geometry object to device memory
-	state.d_geometry = nullptr;
-	cudaMalloc((void**)&(state.d_geometry), sizeof(Geometry) * geometries.size());
-	cudaCheckErrors("cudaMalloc geometry fail");
-	cudaMemcpy(state.d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
-	cudaCheckErrors("cudaMemcpy geometry fail");
+    // TODO: Load scene from file
+    int windowWidth = 800;
+    int windowHeight = 800;
 
-	BXDF* d_bxdfDataTransfer = nullptr;
-	const char* d_namesTransfer = nullptr;
-	Triangle* d_triangleDataTransfer = nullptr;
+    // First we will copy the base geometry object to device memory
+    state.d_geometry = nullptr;
+    cudaMalloc((void**)&(state.d_geometry), sizeof(Geometry) * geometries.size());
+    cudaCheckErrors("cudaMalloc geometry fail");
+    cudaMemcpy(state.d_geometry, geometries.data(), sizeof(Geometry) * geometries.size(), cudaMemcpyHostToDevice);
+    cudaCheckErrors("cudaMemcpy geometry fail");
 
-	// Now we will save the internal triangle data to device memory
-	for (int i = 0; i < geometries.size(); ++i)
-	{
-		d_bxdfDataTransfer = nullptr;
-		cudaMallocManaged((void**)&d_bxdfDataTransfer, sizeof(BXDF));
-		cudaCheckErrors("cudaMalloc host bxdf data fail");
-		cudaMemcpy(d_bxdfDataTransfer, geometries[i].m_bxdf, sizeof(BXDF), cudaMemcpyHostToDevice);
-		cudaCheckErrors("cudaMemcpy host bxdf data fail");
-		cudaMemcpy(&(state.d_geometry[i].m_bxdf), &d_bxdfDataTransfer, sizeof(BXDF*), cudaMemcpyHostToDevice);
-		cudaCheckErrors("cudaMemcpy device bxdf data fail");
+    BXDF* d_bxdfDataTransfer = nullptr;
+    const char* d_namesTransfer = nullptr;
+    Triangle* d_triangleDataTransfer = nullptr;
+
+    // Now we will save the internal triangle data to device memory
+    for (int i = 0; i < geometries.size(); ++i)
+    {
+        d_bxdfDataTransfer = nullptr;
+        cudaMallocManaged((void**)&d_bxdfDataTransfer, sizeof(BXDF));
+        cudaCheckErrors("cudaMalloc host bxdf data fail");
+        cudaMemcpy(d_bxdfDataTransfer, geometries[i].m_bxdf, sizeof(BXDF), cudaMemcpyHostToDevice);
+        cudaCheckErrors("cudaMemcpy host bxdf data fail");
+        cudaMemcpy(&(state.d_geometry[i].m_bxdf), &d_bxdfDataTransfer, sizeof(BXDF*), cudaMemcpyHostToDevice);
+        cudaCheckErrors("cudaMemcpy device bxdf data fail");
 
 #ifdef PIXEL_DEBUG
-		// copy the geometry name to device so that we can do print statement debugging
-		d_namesTransfer = nullptr;
-		cudaMallocManaged((void**)&d_namesTransfer, sizeof(const char*));
-		cudaCheckErrors("cudaMalloc host name data fail");
-		cudaMemcpy(const_cast<char*>(d_namesTransfer), geometries[i].m_name, sizeof(const char*), cudaMemcpyHostToDevice);
-		cudaCheckErrors("cudaMemcpy host name data fail");
-		cudaMemcpy(&(state.d_geometry[i].m_name), &d_namesTransfer, sizeof(const char*), cudaMemcpyHostToDevice);
-		cudaCheckErrors("cudaMemcpy device name data fail");
+        // copy the geometry name to device so that we can do print statement debugging
+        d_namesTransfer = nullptr;
+        cudaMallocManaged((void**)&d_namesTransfer, sizeof(const char*));
+        cudaCheckErrors("cudaMalloc host name data fail");
+        cudaMemcpy(const_cast<char*>(d_namesTransfer), geometries[i].m_name, sizeof(const char*), cudaMemcpyHostToDevice);
+        cudaCheckErrors("cudaMemcpy host name data fail");
+        cudaMemcpy(&(state.d_geometry[i].m_name), &d_namesTransfer, sizeof(const char*), cudaMemcpyHostToDevice);
+        cudaCheckErrors("cudaMemcpy device name data fail");
 #endif
 
-		if (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH)
-		{
-			d_triangleDataTransfer = nullptr;
-			cudaMallocManaged((void**)&d_triangleDataTransfer, sizeof(Triangle) * geometries[i].m_numberOfTriangles);
-			cudaCheckErrors("cudaMalloc host triangle data fail");
-			cudaMemcpy(d_triangleDataTransfer, geometries[i].m_triangles, sizeof(Triangle) * geometries[i].m_numberOfTriangles, cudaMemcpyHostToDevice);
-			cudaCheckErrors("cudaMemcpy host triangle data fail");
-			cudaMemcpy(&(state.d_geometry[i].m_triangles), &d_triangleDataTransfer, sizeof(Triangle*), cudaMemcpyHostToDevice);
-			cudaCheckErrors("cudaMemcpy device triangle data fail");
-		}
-	}
+        if (geometries[i].m_geometryType == GeometryType::TRIANGLEMESH)
+        {
+            d_triangleDataTransfer = nullptr;
+            cudaMallocManaged((void**)&d_triangleDataTransfer, sizeof(Triangle) * geometries[i].m_numberOfTriangles);
+            cudaCheckErrors("cudaMalloc host triangle data fail");
+            cudaMemcpy(d_triangleDataTransfer, geometries[i].m_triangles, sizeof(Triangle) * geometries[i].m_numberOfTriangles, cudaMemcpyHostToDevice);
+            cudaCheckErrors("cudaMemcpy host triangle data fail");
+            cudaMemcpy(&(state.d_geometry[i].m_triangles), &d_triangleDataTransfer, sizeof(Triangle*), cudaMemcpyHostToDevice);
+            cudaCheckErrors("cudaMemcpy device triangle data fail");
+        }
+    }
 
-	Camera camera;
-	camera.m_position = glm::vec3(0.f, 0.f, 29.2f);
-	camera.m_forward = glm::vec3(0.f, 0.f, -1.f);
-	camera.m_worldUp = glm::vec3(0.f, 1.f, 0.f);
-	camera.m_fov = 38.f;
-	camera.m_screenHeight = float(windowWidth);
-	camera.m_screenWidth = float(windowHeight);
-	camera.m_nearClip = 0.001f;
-	camera.m_farClip = 10000.f;
-	camera.m_pitch = 0.f;
-	camera.m_yaw = -90.f;
-	camera.UpdateBasisAxis();
+    Camera camera;
+    camera.m_position = glm::vec3(0.f, 0.f, 29.2f);
+    camera.m_forward = glm::vec3(0.f, 0.f, -1.f);
+    camera.m_worldUp = glm::vec3(0.f, 1.f, 0.f);
+    camera.m_fov = 38.f;
+    camera.m_screenHeight = float(windowWidth);
+    camera.m_screenWidth = float(windowHeight);
+    camera.m_nearClip = 0.001f;
+    camera.m_farClip = 10000.f;
+    camera.m_pitch = 0.f;
+    camera.m_yaw = -90.f;
+    camera.UpdateBasisAxis();
 
-	camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
+    camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
-	std::shared_ptr<GLFWViewer> viewer = std::make_shared<GLFWViewer>(windowWidth, windowHeight);
+    std::shared_ptr<GLFWViewer> viewer = std::make_shared<GLFWViewer>(windowWidth, windowHeight);
 
-	glm::vec3* d_pixelColor = nullptr;
-	cudaMalloc((void**)&(d_pixelColor), sizeof(glm::vec3) * windowWidth * windowHeight);
-	cudaCheckErrors("cudaMalloc d_pixelColor fail");
+    glm::vec3* d_pixelColor = nullptr;
+    cudaMalloc((void**)&(d_pixelColor), sizeof(glm::vec3) * windowWidth * windowHeight);
+    cudaCheckErrors("cudaMalloc d_pixelColor fail");
 
-	int iteration = 1;
+    int iteration = 1;
 
-	int maxDepth = 6;
-	int samplesPerPixel = 2;
+    int maxDepth = 6;
+    int samplesPerPixel = 2;
 
-	GpuTimer timer;
-	float time = 0.f;
+    GpuTimer timer;
+    float time = 0.f;
 
-	while (!glfwWindowShouldClose(viewer->m_window))
-	{
-		processInput(viewer->m_window, camera, viewer.get(), iteration, time);
-		camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
+    while (!glfwWindowShouldClose(viewer->m_window))
+    {
+        processInput(viewer->m_window, camera, viewer.get(), iteration, time);
+        camera.m_invViewProj = camera.GetInverseViewMatrix() * camera.GetInverseProjectionMatrix();
 
-		//
-		// EXECUTE CUDA KERNEL ON RENDER BUFFER
-		//
+        //
+        // EXECUTE CUDA KERNEL ON RENDER BUFFER
+        //
 
-		cudaGraphicsMapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
-		{
-			timer.Start();
+        cudaGraphicsMapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
+        {
+            timer.Start();
 
-			viewer->cuda_err = launchPathTraceKernel(
-				viewer->interop->ca[viewer->interop->index],
-				windowWidth,
-				windowHeight,
-				viewer->event,
-				viewer->stream,
-				state.d_geometry, 
-				d_lights,
-				camera, 
-				geometries.size(),
-				lights.size(),
-				iteration, 
-				maxDepth,
-				samplesPerPixel,
-				d_pixelColor);
+            viewer->cuda_err = launchPathTraceKernel(
+                viewer->interop->ca[viewer->interop->index],
+                windowWidth,
+                windowHeight,
+                viewer->event,
+                viewer->stream,
+                state.d_geometry,
+                d_lights,
+                camera,
+                geometries.size(),
+                lights.size(),
+                iteration,
+                maxDepth,
+                samplesPerPixel,
+                d_pixelColor);
 
-			timer.Stop();
-		}
-		cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
+            timer.Stop();
+        }
+        cudaGraphicsUnmapResources(1, &viewer->interop->cgr[viewer->interop->index], viewer->stream);
 
-		char title[256];
-		time = timer.Elapsed();
-		sprintf(title, "Firefly | FPS %f | iteration: %d | kernel took: %.2fs | samples per pixel: %d | max depth: %d", 1.0f/time, iteration, time, samplesPerPixel, maxDepth);
-		glfwSetWindowTitle(viewer->m_window, title);
-		
-		if (iteration == 1000 || iteration == 100 || iteration == 10)
-		{
-			//saveToHDR(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
-			//saveToPNG(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
-		}
+        char title[256];
+        time = timer.Elapsed();
+        sprintf(title, "Firefly | FPS %f | iteration: %d | kernel took: %.2fs | samples per pixel: %d | max depth: %d", 1.0f / time, iteration, time, samplesPerPixel, maxDepth);
+        glfwSetWindowTitle(viewer->m_window, title);
 
-		//
-		// BLIT & SWAP FBO
-		// 
-		glBlitNamedFramebuffer(viewer->interop->fb[viewer->interop->index], 0,
-			0, 0, viewer->interop->width, viewer->interop->height,
-			0, viewer->interop->height, viewer->interop->width, 0,
-			GL_COLOR_BUFFER_BIT,
-			GL_NEAREST);
+        if (iteration == 1000 || iteration == 100 || iteration == 10)
+        {
+            //saveToHDR(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
+            //saveToPNG(viewer.get(), iteration, maxDepth, samplesPerPixel, "NEE");
+        }
 
-		viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
-		iteration++;
+        //
+        // BLIT & SWAP FBO
+        // 
+        glBlitNamedFramebuffer(viewer->interop->fb[viewer->interop->index], 0,
+            0, 0, viewer->interop->width, viewer->interop->height,
+            0, viewer->interop->height, viewer->interop->width, 0,
+            GL_COLOR_BUFFER_BIT,
+            GL_NEAREST);
 
-		glfwSwapBuffers(viewer->m_window);
-		glfwPollEvents();
-	}
+        viewer->interop->index = (viewer->interop->index + 1) % viewer->interop->count;
+        iteration++;
 
-	glfwDestroyWindow(viewer->m_window);
-	glfwTerminate();
+        glfwSwapBuffers(viewer->m_window);
+        glfwPollEvents();
+    }
 
-	cudaFree(state.d_geometry);
-	cudaFree(d_pixelColor);
-	cudaFree(d_bxdfDataTransfer);
-	cudaFree(const_cast<char*>(d_namesTransfer));
-	cudaFree(d_triangleDataTransfer);
-	cudaFree(d_lights);
-	return 0;
+    glfwDestroyWindow(viewer->m_window);
+    glfwTerminate();
+
+    cudaFree(state.d_geometry);
+    cudaFree(d_pixelColor);
+    cudaFree(d_bxdfDataTransfer);
+    cudaFree(const_cast<char*>(d_namesTransfer));
+    cudaFree(d_triangleDataTransfer);
+    cudaFree(d_lights);
+    return 0;
 }

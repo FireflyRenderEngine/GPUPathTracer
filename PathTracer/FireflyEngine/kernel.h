@@ -6,11 +6,11 @@ struct Camera;
 
 __device__ glm::vec3 noHitColor()
 {
-	return glm::vec3(1.f, 0.75f, 0.79f);
+    return glm::vec3(1.f, 0.75f, 0.79f);
 }
 
 struct PathTracerState
 {
-	// device side variables
-	Geometry* d_geometry{ nullptr };
+    // device side variables
+    Geometry* d_geometry{ nullptr };
 };
