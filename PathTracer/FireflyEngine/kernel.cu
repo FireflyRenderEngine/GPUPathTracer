@@ -720,7 +720,7 @@ int main()
 
 	BXDF lightbxdfPlane;
 	lightbxdfPlane.m_type = BXDFTyp::EMITTER;
-	lightbxdfPlane.m_intensity = 1.f;
+	lightbxdfPlane.m_intensity = 3.f;
 	lightbxdfPlane.m_emissiveColor = { 1.f, 1.f, 1.f };
 
 	BXDF mirrorbxdfWHITEMesh;
@@ -736,7 +736,7 @@ int main()
 
 	sphereglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
 	spheremirrorMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
-	wahooglassMeshGeometry.m_bxdf	= &glassbxdfWHITEMesh;
+	wahooglassMeshGeometry.m_bxdf	= &mirrorbxdfWHITEMesh;
 	bottomPlaneWhiteGeometry.m_bxdf = &diffusebxdfWHITEMesh;
 	backPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
 	topPlaneWhiteGeometry.m_bxdf	= &diffusebxdfWHITEMesh;
