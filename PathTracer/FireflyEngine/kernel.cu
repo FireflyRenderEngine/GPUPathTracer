@@ -545,18 +545,21 @@ int main()
 	state.d_raytracableObjects = geometries.size();
 
 	// Create and load AABB
-	state.d_AABB = nullptr;
-	cudaMalloc((void**)&(state.d_AABB), sizeof(AABB) * GetTotalPrimitiveCount(geometries));
-	cudaCheckErrors("cudaMalloc geometry fail");
-	int blockSize = 256;
-	int numBlocks = (GetTotalPrimitiveCount(geometries) + 1) / blockSize;
-	CreateWorldAABB << <numBlocks, blockSize >> > (state.d_geometry, geometries.size(), GetTotalPrimitiveCount(geometries), state.d_AABB);
+	//state.d_AABB = nullptr;
+	size_t totalPrimitiveCount = GetTotalPrimitiveCount(geometries);
+	//cudaMalloc((void**)&(state.d_AABB), sizeof(AABB) * totalPrimitiveCount);
+	//cudaCheckErrors("cudaMalloc geometry fail");
+	//int blockSize = 256;
+	//int numBlocks = (totalPrimitiveCount / blockSize) + 1;
+	//CreateWorldAABB << <numBlocks, blockSize >> > (state.d_geometry, geometries.size(), totalPrimitiveCount, state.d_AABB);
 	// Get the memory back from the GPU to CPU
 	std::vector<AABB> aabbArray; 
-	aabbArray.resize(GetTotalPrimitiveCount(geometries));
-	cudaMemcpy(aabbArray.data(), state.d_AABB, GetTotalPrimitiveCount(geometries), cudaMemcpyDeviceToHost);
+	//aabbArray.resize(totalPrimitiveCount);
+	// Construct the AABB on the CPU
+	BuildAABBCPU(aabbArray, geometries);
+	//cudaMemcpy(aabbArray.data(), state.d_AABB, totalPrimitiveCount, cudaMemcpyDeviceToHost);
 	//Create K-D Tree
-	std::shared_ptr<KDTree> kdTree = std::make_shared<KDTree>(aabbArray, 0, 2);
+	//std::shared_ptr<KDTree> kdTree = std::make_shared<KDTree>(aabbArray, 10);
 
 
 	// Now we will save the internal triangle data to device memory
